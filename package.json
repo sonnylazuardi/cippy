@@ -1,7 +1,7 @@
 {
   "name": "cippy",
   "version": "1.0.0",
-  "description": "real time database service for real time app",
+  "description": "web audio editor with real time database",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
