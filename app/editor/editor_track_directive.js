@@ -4,7 +4,7 @@ app.directive('editorTrack', ['$rootScope', '$compile', 'EditorConfig', 'Arrange
   return {
     restrict: 'E',
     controller: 'EditorTrackController',
-    templateUrl: 'editor/track.html',
+    templateUrl: 'partials/editor/track.html',
     link: function(scope, element, attrs){
       var trackElement = element[0].querySelector('.track');
 

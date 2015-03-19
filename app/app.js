@@ -1,5 +1,1 @@
-angular.module('simple-wae', ['ngSanitize'])
-
-.controller('MainCtrl', function($scope) {
-    $scope.test = 'Hello World';
-});
+var app = angular.module('cippy', ['partials', 'ngSanitize']); 

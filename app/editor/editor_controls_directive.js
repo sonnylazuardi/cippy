@@ -1,7 +1,8 @@
-app.directive('editorControls', function() {
+app.directive('editorControls', function($templateCache) {
   return {
     restrict: 'E',
-    templateUrl: 'editor/controls.html',
+    templateUrl: 'partials/editor/controls.html',
     controller: 'EditorControlsController'
   }
+
 });

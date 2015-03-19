@@ -1,5 +1,5 @@
-app.controller('EditorController', ['$rootScope', '$scope', 'Arrangement', 'EditorConfig', 'Sampler', 'BufferedNode',
-  function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode){
+app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode){
+
     $scope.arrangement = Arrangement.doc;
     $scope.config = EditorConfig;
 
@@ -8,4 +8,5 @@ app.controller('EditorController', ['$rootScope', '$scope', 'Arrangement', 'Edit
         $scope.arrangement = Arrangement.doc;
       })
     });
-}]);
+
+});

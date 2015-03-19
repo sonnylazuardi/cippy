@@ -1,5 +1,4 @@
-app.directive('progressLine', ['$rootScope', 'Scheduler', 'EditorConfig', 'Arrangement',
-    function($rootScope, Scheduler, EditorConfig, Arrangement) {
+app.directive('progressLine', function($rootScope, Scheduler, EditorConfig, Arrangement) {
 
   var setToCurrentPosition = function(el){
     var startPosition = Scheduler.songPosition * EditorConfig.pixelsPerSecond + EditorConfig.track_settings_offset;
@@ -53,4 +52,4 @@ app.directive('progressLine', ['$rootScope', 'Scheduler', 'EditorConfig', 'Arran
       scope.$watch('config.pixelsPerSecond', function(){ setToCurrentPosition(progressLine); });
     }
   }
-}]);
+});

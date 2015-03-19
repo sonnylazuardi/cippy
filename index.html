@@ -1,26 +1,26 @@
 <!DOCTYPE html>
-<html lang="en" ng-app="simple-wae">
+<html lang="en" ng-app="cippy">
 <head>
-    <meta charset="UTF-8">
-    <title>Cippy Editor</title>
-    <link rel="stylesheet" href="vendor/css/fontello.css">
-    <link rel="stylesheet" href="vendor/css/topcoat-desktop-dark.css">
-    <link rel="stylesheet" href="vendor/css/topcoat-select.css">
+  <meta charset="UTF-8">
+  <title>Cippy Editor</title>
+  <link rel="stylesheet" href="dist/css/vendor.css">
+  <link rel="stylesheet" href="dist/css/app.css">
 </head>
 <body>
-    <div id="editor" ng-controller="EditorController">
-      <!--x-editor-header /-->
-      <progress-line></progress-line>
+  <div id="editor" ng-controller="EditorController">
+    <!--x-editor-header /-->
+    <progress-line></progress-line>
 
-      <editor-controls></editor-controls>
+    <editor-controls></editor-controls>
 
-      <time-line></time-line>
+    <time-line></time-line>
 
-      <editor-tracks></editor-tracks>
-    </div>
-    
-    <script src="vendor/js/angular.min.js"></script>
-    <script src="vendor/js/angular-sanitize.min.js"></script>
-    <script src="app/app.js"></script>
+    <editor-tracks></editor-tracks>
+  </div>
+  
+  <script src="dist/js/vendor.js"></script>
+  <script src="dist/js/app.js"></script>
+  <script src="dist/js/partials.js"></script>
+
 </body>
 </html>
