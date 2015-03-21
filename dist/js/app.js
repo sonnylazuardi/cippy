@@ -1,320 +1,10 @@
 var app = angular.module('cippy', ['partials', 'ngSanitize']); 
 app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http){
 
-  // DiffSyncClient.initializeOrSync();
-
   var arrangement = {
-    doc: {
-      "_id": "2197e37f783d4a9f58793a769b000511",
-      "title": "test",
-      "owner_id": "2197e37f783d4a9f58793a769b0003a6",
-      "shared_with": [],
-      "type": "arrangement",
-      "gain": 1,
-      "buffers": [],
-      "tracks": [
-          {
-              "id": "track_547742374880256640",
-              "title": "Untitled",
-              "type": "drums",
-              "pieces": [
-                  {
-                      "type": "drum",
-                      "drumType": "trap",
-                      "position": 0.66,
-                      "id": "drums_123349464225170190",
-                      "instruments": [
-                          "hihat-closed",
-                          "bass",
-                          "snare"
-                      ],
-                      "patternOrder": [
-                          "a"
-                      ],
-                      "patterns": {
-                          "a": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {
-                                  "bass": [
-                                      1,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      1,
-                                      null,
-                                      null,
-                                      1
-                                  ],
-                                  "kick": [
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null
-                                  ],
-                                  "snare": [
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      1,
-                                      1,
-                                      1,
-                                      null,
-                                      null,
-                                      1,
-                                      1,
-                                      null
-                                  ],
-                                  "hihat-closed": [
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null
-                                  ]
-                              }
-                          },
-                          "b": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "c": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "d": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "e": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "f": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          }
-                      }
-                  },
-                  {
-                      "type": "drum",
-                      "drumType": "regular",
-                      "position": 3.48,
-                      "id": "drums_208754796336582430",
-                      "instruments": [
-                          "hihat-closed",
-                          "bass",
-                          "snare"
-                      ],
-                      "patternOrder": [
-                          "a"
-                      ],
-                      "patterns": {
-                          "a": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {
-                                  "bass": [
-                                      1,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      1,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      1,
-                                      null
-                                  ],
-                                  "kick": [
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      1,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      1
-                                  ],
-                                  "snare": [
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      null
-                                  ],
-                                  "hihat-closed": [
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      null,
-                                      1,
-                                      null,
-                                      null,
-                                      null,
-                                      null
-                                  ]
-                              }
-                          },
-                          "b": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "c": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "d": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "e": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "f": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          }
-                      }
-                  },
-                  {
-                      "type": "drum",
-                      "drumType": "trap",
-                      "position": 6.44,
-                      "id": "drums_1261417298168277500",
-                      "instruments": [
-                          "hihat-closed",
-                          "bass",
-                          "snare"
-                      ],
-                      "patternOrder": [
-                          "a"
-                      ],
-                      "patterns": {
-                          "a": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "b": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "c": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "d": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "e": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          },
-                          "f": {
-                              "slots": 16,
-                              "bpm": 100,
-                              "beats": {}
-                          }
-                      }
-                  }
-              ],
-              "gain": 1
-          },
-          {
-              "id": "track_901541790377212500",
-              "title": "Untitled",
-              "type": "recording",
-              "pieces": [],
-              "gain": "1"
-          }
-      ],
-      "created_at": 1426568295629
-    },
+    doc: {},
+
+    _rev: '',
 
     _pieces: {},
 
@@ -444,24 +134,73 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.master.connect(arrangement.compressor);
   arrangement.compressor.connect(arrangement.context.destination);
 
-  $rootScope.$watch('arrangement', function(){
-    // DiffSyncClient.syncWithServer();
+  var db = new PouchDB('cippy');
+  var remoteCouch = 'http://localhost:5984/cippy';
+
+  var init = function() {
+    // console.log('init');
+    db.get('2197e37f783d4a9f58793a769b000511').then(function (doc) {
+      console.log(doc);
+      arrangement.doc = doc;
+      $rootScope.arrangement = arrangement.doc;
+      $rootScope.$emit('sync');
+    });
+  }
+
+  var syncing = function(doc) {
+    
+    // console.log('syncing');
+    arrangement.doc = doc.doc;
+    $rootScope.arrangement = arrangement.doc;
+    $rootScope.$emit('sync');
+    
+  };
+
+  // Initialise a sync with the remote server
+  function sync() {
+    var opts = {live: true, retry: true};
+    db.replicate.to(remoteCouch, opts, syncError);
+    db.replicate.from(remoteCouch, opts, syncError);
+  }
+
+  // There was some form or error syncing
+  function syncError() {
+    console.log('syncError');
+  }
+
+  db.changes({
+    since: 'now',
+    live: true,
+    include_docs: true,
+    conflicts:true
+  }).on('change', syncing);
+
+  if (remoteCouch) {
+    init();
+    sync();
+  }
+
+  $rootScope.$watch('arrangement', function(newValue, oldValue){
+
+    if (newValue && oldValue) {
+      if (newValue._rev == oldValue._rev) {
+
+        console.log('changed');
+
+        // console.log(newValue);
+        // console.log(oldValue);
+        // console.log(arrangement.doc);
+        db.put(newValue, {conflicts: true});
+
+
+      }
+    }
   }, true);
-
-  // $rootScope.$on('sync', function(){
-  //   $rootScope.$apply(function(){
-  //     // arrangement.doc = DiffSyncClient.doc.localCopy;
-
-  //     // set up the watcher
-  //     if(!$rootScope.arrangement)
-  //       $rootScope.arrangement = arrangement.doc;
-
-  //     $rootScope.$emit('synced');
-  //   });
-  // });
 
   return arrangement;
 });
+
+
 app.directive('contenteditable', function(){
   return {
     require: 'ngModel',
@@ -2702,137 +2441,6 @@ app.directive('synthTone', ['$compile', 'EditorConfig',
     }
   }
 }]);
-var recLength = 0,
-  recBuffersL = [],
-  recBuffersR = [],
-  sampleRate;
-
-this.onmessage = function(e){
-  switch(e.data.command){
-    case 'init':
-      init(e.data.config);
-      break;
-    case 'record':
-      record(e.data.buffer);
-      break;
-    case 'exportWAV':
-      exportWAV(e.data.type);
-      break;
-    case 'getBuffer':
-      getBuffer();
-      break;
-    case 'clear':
-      clear();
-      break;
-  }
-};
-
-function init(config){
-  sampleRate = config.sampleRate;
-}
-
-function record(inputBuffer){
-  recBuffersL.push(inputBuffer[0]);
-  recBuffersR.push(inputBuffer[1]);
-  recLength += inputBuffer[0].length;
-}
-
-function exportWAV(type){
-  var bufferL = mergeBuffers(recBuffersL, recLength);
-  var bufferR = mergeBuffers(recBuffersR, recLength);
-  var interleaved = interleave(bufferL, bufferR);
-  var dataview = encodeWAV(interleaved);
-  var audioBlob = new Blob([dataview], { type: type });
-
-  this.postMessage(audioBlob);
-}
-
-function getBuffer() {
-  var buffers = [];
-  buffers.push( mergeBuffers(recBuffersL, recLength) );
-  buffers.push( mergeBuffers(recBuffersR, recLength) );
-  this.postMessage(buffers);
-}
-
-function clear(){
-  recLength = 0;
-  recBuffersL = [];
-  recBuffersR = [];
-}
-
-function mergeBuffers(recBuffers, recLength){
-  var result = new Float32Array(recLength);
-  var offset = 0;
-  for (var i = 0; i < recBuffers.length; i++){
-    result.set(recBuffers[i], offset);
-    offset += recBuffers[i].length;
-  }
-  return result;
-}
-
-function interleave(inputL, inputR){
-  var length = inputL.length + inputR.length;
-  var result = new Float32Array(length);
-
-  var index = 0,
-    inputIndex = 0;
-
-  while (index < length){
-    result[index++] = inputL[inputIndex];
-    result[index++] = inputR[inputIndex];
-    inputIndex++;
-  }
-  return result;
-}
-
-function floatTo16BitPCM(output, offset, input){
-  for (var i = 0; i < input.length; i++, offset+=2){
-    var s = Math.max(-1, Math.min(1, input[i]));
-    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-  }
-}
-
-function writeString(view, offset, string){
-  for (var i = 0; i < string.length; i++){
-    view.setUint8(offset + i, string.charCodeAt(i));
-  }
-}
-
-function encodeWAV(samples){
-  var buffer = new ArrayBuffer(44 + samples.length * 2);
-  var view = new DataView(buffer);
-
-  /* RIFF identifier */
-  writeString(view, 0, 'RIFF');
-  /* file length */
-  view.setUint32(4, 32 + samples.length * 2, true);
-  /* RIFF type */
-  writeString(view, 8, 'WAVE');
-  /* format chunk identifier */
-  writeString(view, 12, 'fmt ');
-  /* format chunk length */
-  view.setUint32(16, 16, true);
-  /* sample format (raw) */
-  view.setUint16(20, 1, true);
-  /* channel count */
-  view.setUint16(22, 2, true);
-  /* sample rate */
-  view.setUint32(24, sampleRate, true);
-  /* byte rate (sample rate * block align) */
-  view.setUint32(28, sampleRate * 4, true);
-  /* block align (channel count * bytes per sample) */
-  view.setUint16(32, 4, true);
-  /* bits per sample */
-  view.setUint16(34, 16, true);
-  /* data chunk identifier */
-  writeString(view, 36, 'data');
-  /* data chunk length */
-  view.setUint32(40, samples.length * 2, true);
-
-  floatTo16BitPCM(view, 44, samples);
-
-  return view;
-}
 app.factory('BaseAudioNode', [function(){
   return Class.extend({
     constructor: function(data) {
@@ -3511,3 +3119,134 @@ app.factory('Track', ['BaseAudioNode', 'Arrangement',
   });
 
 }]);
+var recLength = 0,
+  recBuffersL = [],
+  recBuffersR = [],
+  sampleRate;
+
+this.onmessage = function(e){
+  switch(e.data.command){
+    case 'init':
+      init(e.data.config);
+      break;
+    case 'record':
+      record(e.data.buffer);
+      break;
+    case 'exportWAV':
+      exportWAV(e.data.type);
+      break;
+    case 'getBuffer':
+      getBuffer();
+      break;
+    case 'clear':
+      clear();
+      break;
+  }
+};
+
+function init(config){
+  sampleRate = config.sampleRate;
+}
+
+function record(inputBuffer){
+  recBuffersL.push(inputBuffer[0]);
+  recBuffersR.push(inputBuffer[1]);
+  recLength += inputBuffer[0].length;
+}
+
+function exportWAV(type){
+  var bufferL = mergeBuffers(recBuffersL, recLength);
+  var bufferR = mergeBuffers(recBuffersR, recLength);
+  var interleaved = interleave(bufferL, bufferR);
+  var dataview = encodeWAV(interleaved);
+  var audioBlob = new Blob([dataview], { type: type });
+
+  this.postMessage(audioBlob);
+}
+
+function getBuffer() {
+  var buffers = [];
+  buffers.push( mergeBuffers(recBuffersL, recLength) );
+  buffers.push( mergeBuffers(recBuffersR, recLength) );
+  this.postMessage(buffers);
+}
+
+function clear(){
+  recLength = 0;
+  recBuffersL = [];
+  recBuffersR = [];
+}
+
+function mergeBuffers(recBuffers, recLength){
+  var result = new Float32Array(recLength);
+  var offset = 0;
+  for (var i = 0; i < recBuffers.length; i++){
+    result.set(recBuffers[i], offset);
+    offset += recBuffers[i].length;
+  }
+  return result;
+}
+
+function interleave(inputL, inputR){
+  var length = inputL.length + inputR.length;
+  var result = new Float32Array(length);
+
+  var index = 0,
+    inputIndex = 0;
+
+  while (index < length){
+    result[index++] = inputL[inputIndex];
+    result[index++] = inputR[inputIndex];
+    inputIndex++;
+  }
+  return result;
+}
+
+function floatTo16BitPCM(output, offset, input){
+  for (var i = 0; i < input.length; i++, offset+=2){
+    var s = Math.max(-1, Math.min(1, input[i]));
+    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+}
+
+function writeString(view, offset, string){
+  for (var i = 0; i < string.length; i++){
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+function encodeWAV(samples){
+  var buffer = new ArrayBuffer(44 + samples.length * 2);
+  var view = new DataView(buffer);
+
+  /* RIFF identifier */
+  writeString(view, 0, 'RIFF');
+  /* file length */
+  view.setUint32(4, 32 + samples.length * 2, true);
+  /* RIFF type */
+  writeString(view, 8, 'WAVE');
+  /* format chunk identifier */
+  writeString(view, 12, 'fmt ');
+  /* format chunk length */
+  view.setUint32(16, 16, true);
+  /* sample format (raw) */
+  view.setUint16(20, 1, true);
+  /* channel count */
+  view.setUint16(22, 2, true);
+  /* sample rate */
+  view.setUint32(24, sampleRate, true);
+  /* byte rate (sample rate * block align) */
+  view.setUint32(28, sampleRate * 4, true);
+  /* block align (channel count * bytes per sample) */
+  view.setUint16(32, 4, true);
+  /* bits per sample */
+  view.setUint16(34, 16, true);
+  /* data chunk identifier */
+  writeString(view, 36, 'data');
+  /* data chunk length */
+  view.setUint32(40, samples.length * 2, true);
+
+  floatTo16BitPCM(view, 44, samples);
+
+  return view;
+}

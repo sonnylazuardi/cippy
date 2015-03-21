@@ -1,0 +1,34 @@
+body {
+    overflow-x: hidden;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    background: #FAD46B;
+    font-family: 'Helvetica', 'Arial';
+}
+
+.bg {
+    background: url('bg.png') no-repeat;
+    background-position: center;
+    background-size: contain;
+    width: 100%;
+    height: 700px;
+    text-align: center;
+    padding-top: 500px;
+    box-sizing: border-box;
+}
+
+a.btn {
+    text-decoration: none;
+    color: #fff;
+    background: #77642F;
+    padding: 20px;
+    border-radius: 5px;
+
+}
+
+a.btn:hover {
+    background: #fff;   
+    color: #77642F;
+}

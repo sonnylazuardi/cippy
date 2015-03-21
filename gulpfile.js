@@ -9,6 +9,7 @@ var nib         = require('nib');
 var vendorPath  = [
   './vendor/js/angular.js',
   './vendor/js/angular-sanitize.js',
+  './vendor/js/pouchdb.min.js',
   './vendor/js/*.js'
 ];
 
@@ -48,6 +49,7 @@ gulp.task('stylus', function() {
 gulp.task('vendor', function() {
   return gulp.src(vendorPath)
     .pipe(concat('vendor.js'))
+    // .pipe(uglify())
     .pipe(gulp.dest('./dist/js/'));
 });
 
