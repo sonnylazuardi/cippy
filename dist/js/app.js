@@ -1593,157 +1593,6 @@ app.factory('utils', [function(){
     }
   };
 }]);
-app.controller('RecordingController', function($scope, SharedAudioContext, Arrangement, BufferedRecordingNode){
-    var audioStream, audioInput, analyser, gainControl;
-
-    // Stops all streams and the recording
-    var stopRecording = function(){
-      if($scope.recorder)
-        $scope.recorder.stop();
-
-      gainControl.disconnect();
-      analyser.disconnect();
-      audioInput.disconnect();
-      audioStream.stop();
-      $scope.isRecording = false;
-    };
-
-    var cleanUp = function(){
-      $scope.isUploading = false;
-      $scope.uploadProgress = 0;
-      $scope.speakers = false;
-      $scope.analyser = null;
-      $scope.showRecording = false;
-      $scope.file = null;
-      $scope.recorder = null;
-      $scope.recordedNode = null;
-    };
-
-    $scope.uploadRecording = function(){
-      $scope.isUploading = true;
-      Arrangement.uploadBuffer($scope.file).then(function(uploadedFile){
-        // FileBrowser.setActiveFile(uploadedFile.name);
-        // FileBrowser.show();
-        $scope.cancelRecording();
-      }, function(err){
-        console.log('There was an error!', err);
-      }, function(percent){
-        $scope.uploadProgress = percent;
-      });
-    };
-
-    $scope.triggerRecording = function(){
-      if($scope.isRecording){
-        $scope.recorder.exportWAV(function(file){
-          $scope.file = file;
-          $scope.file.name = "new_recording_" + Date.now();
-          var fileReader = new FileReader();
-          fileReader.onload = function(){
-            var arrBuffer = this.result;
-            SharedAudioContext.getContext().decodeAudioData(arrBuffer, function(buffer){
-              $scope.$apply(function(){
-                $scope.recordedNode = new BufferedRecordingNode({}, buffer);
-              });
-            })
-          };
-          fileReader.readAsArrayBuffer(file);
-        });
-
-        stopRecording();
-      }else{
-        $scope.isRecording = true;
-        $scope.recorder = new Recorder(analyser, {
-          workerPath: 'dist/workers/recorderWorker.js'
-        });
-        $scope.recorder.record();
-      }
-    };
-
-    $scope.cancelRecording = function(){
-      stopRecording();
-      cleanUp();
-      $scope.removeAdditionalContent();
-    };
-
-    $scope.playRecording = function(){
-      if(!$scope.recordedNode) return;
-      if($scope.recordedNode.isPlaying())
-        $scope.recordedNode.stop();
-      else
-        $scope.recordedNode.play()
-    }
-
-    $scope.$watch('speakers', function(){
-      if (!gainControl) return;
-      if($scope.speakers){
-        gainControl.connect(SharedAudioContext.getContext().destination);
-      }else{
-        gainControl.disconnect();
-      }
-    })
-
-    // ask for microphone access
-    navigator.getUserMedia({audio: true}, function(stream){
-      var context = SharedAudioContext.getContext();
-      audioStream = stream;
-      audioInput = context.createMediaStreamSource(audioStream);
-      analyser = context.createAnalyser();
-
-      audioInput.connect(analyser);
-      gainControl = context.createGain();
-      gainControl.gain.value = 1;
-      audioInput.connect(gainControl);
-      if($scope.speakers)
-        gainControl.connect(context.destination);
-
-      $scope.$apply(function(){
-        $scope.analyser = analyser;
-      });
-    },function(err){
-      console.log(err);
-      // TODO: add proper error handling, especially for the case when users accidentally block the mic
-      alert('We did not get access to your microphone, please reload and allow access again!');
-    });
-
-});
-app.directive('recordingElement', function() {
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/recording/recording-element.html',
-    controller: 'RecordingController'
-  }
-});
-app.controller('RecordingSelectionController', ['$rootScope', '$scope',
-  function($rootScope, $scope){
-
-  var close = function(){
-    $scope.node = null;
-    $scope.buffer = null;
-    $scope.showRecordingSelection = false;
-  };
-
-  $scope.playSelection = function(){
-    $scope.node.play();
-  };
-
-  $scope.uploadSelection = function(){
-    
-  };
-
-  $scope.deleteRecording = function(){
-
-  };
-
-}]);
-app.directive('recordingSelection', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
-  function($rootScope, $compile, EditorConfig, Arrangement) {
-
-  return {
-    restrict: 'A',
-    controller: 'RecordingSelectionController',
-    templateUrl: 'recording/recording-selection.html'
-  }
-}]);
 app.directive('beatsGrid', ['$compile', 'EditorConfig', 'Drumkits',
     function($compile, EditorConfig, Drumkits) {
 
@@ -2441,6 +2290,288 @@ app.directive('synthTone', ['$compile', 'EditorConfig',
     }
   }
 }]);
+app.controller('RecordingController', function($scope, SharedAudioContext, Arrangement, BufferedRecordingNode){
+    var audioStream, audioInput, analyser, gainControl;
+
+    // Stops all streams and the recording
+    var stopRecording = function(){
+      if($scope.recorder)
+        $scope.recorder.stop();
+
+      gainControl.disconnect();
+      analyser.disconnect();
+      audioInput.disconnect();
+      audioStream.stop();
+      $scope.isRecording = false;
+    };
+
+    var cleanUp = function(){
+      $scope.isUploading = false;
+      $scope.uploadProgress = 0;
+      $scope.speakers = false;
+      $scope.analyser = null;
+      $scope.showRecording = false;
+      $scope.file = null;
+      $scope.recorder = null;
+      $scope.recordedNode = null;
+    };
+
+    $scope.uploadRecording = function(){
+      $scope.isUploading = true;
+      Arrangement.uploadBuffer($scope.file).then(function(uploadedFile){
+        // FileBrowser.setActiveFile(uploadedFile.name);
+        // FileBrowser.show();
+        $scope.cancelRecording();
+      }, function(err){
+        console.log('There was an error!', err);
+      }, function(percent){
+        $scope.uploadProgress = percent;
+      });
+    };
+
+    $scope.triggerRecording = function(){
+      if($scope.isRecording){
+        $scope.recorder.exportWAV(function(file){
+          $scope.file = file;
+          $scope.file.name = "new_recording_" + Date.now();
+          var fileReader = new FileReader();
+          fileReader.onload = function(){
+            var arrBuffer = this.result;
+            SharedAudioContext.getContext().decodeAudioData(arrBuffer, function(buffer){
+              $scope.$apply(function(){
+                $scope.recordedNode = new BufferedRecordingNode({}, buffer);
+              });
+            })
+          };
+          fileReader.readAsArrayBuffer(file);
+        });
+
+        stopRecording();
+      }else{
+        $scope.isRecording = true;
+        $scope.recorder = new Recorder(analyser, {
+          workerPath: 'dist/workers/recorderWorker.js'
+        });
+        $scope.recorder.record();
+      }
+    };
+
+    $scope.cancelRecording = function(){
+      stopRecording();
+      cleanUp();
+      $scope.removeAdditionalContent();
+    };
+
+    $scope.playRecording = function(){
+      if(!$scope.recordedNode) return;
+      if($scope.recordedNode.isPlaying())
+        $scope.recordedNode.stop();
+      else
+        $scope.recordedNode.play()
+    }
+
+    $scope.$watch('speakers', function(){
+      if (!gainControl) return;
+      if($scope.speakers){
+        gainControl.connect(SharedAudioContext.getContext().destination);
+      }else{
+        gainControl.disconnect();
+      }
+    })
+
+    // ask for microphone access
+    navigator.getUserMedia({audio: true}, function(stream){
+      var context = SharedAudioContext.getContext();
+      audioStream = stream;
+      audioInput = context.createMediaStreamSource(audioStream);
+      analyser = context.createAnalyser();
+
+      audioInput.connect(analyser);
+      gainControl = context.createGain();
+      gainControl.gain.value = 1;
+      audioInput.connect(gainControl);
+      if($scope.speakers)
+        gainControl.connect(context.destination);
+
+      $scope.$apply(function(){
+        $scope.analyser = analyser;
+      });
+    },function(err){
+      console.log(err);
+      // TODO: add proper error handling, especially for the case when users accidentally block the mic
+      alert('We did not get access to your microphone, please reload and allow access again!');
+    });
+
+});
+app.directive('recordingElement', function() {
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/recording/recording-element.html',
+    controller: 'RecordingController'
+  }
+});
+app.controller('RecordingSelectionController', ['$rootScope', '$scope',
+  function($rootScope, $scope){
+
+  var close = function(){
+    $scope.node = null;
+    $scope.buffer = null;
+    $scope.showRecordingSelection = false;
+  };
+
+  $scope.playSelection = function(){
+    $scope.node.play();
+  };
+
+  $scope.uploadSelection = function(){
+    
+  };
+
+  $scope.deleteRecording = function(){
+
+  };
+
+}]);
+app.directive('recordingSelection', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
+  function($rootScope, $compile, EditorConfig, Arrangement) {
+
+  return {
+    restrict: 'A',
+    controller: 'RecordingSelectionController',
+    templateUrl: 'recording/recording-selection.html'
+  }
+}]);
+var recLength = 0,
+  recBuffersL = [],
+  recBuffersR = [],
+  sampleRate;
+
+this.onmessage = function(e){
+  switch(e.data.command){
+    case 'init':
+      init(e.data.config);
+      break;
+    case 'record':
+      record(e.data.buffer);
+      break;
+    case 'exportWAV':
+      exportWAV(e.data.type);
+      break;
+    case 'getBuffer':
+      getBuffer();
+      break;
+    case 'clear':
+      clear();
+      break;
+  }
+};
+
+function init(config){
+  sampleRate = config.sampleRate;
+}
+
+function record(inputBuffer){
+  recBuffersL.push(inputBuffer[0]);
+  recBuffersR.push(inputBuffer[1]);
+  recLength += inputBuffer[0].length;
+}
+
+function exportWAV(type){
+  var bufferL = mergeBuffers(recBuffersL, recLength);
+  var bufferR = mergeBuffers(recBuffersR, recLength);
+  var interleaved = interleave(bufferL, bufferR);
+  var dataview = encodeWAV(interleaved);
+  var audioBlob = new Blob([dataview], { type: type });
+
+  this.postMessage(audioBlob);
+}
+
+function getBuffer() {
+  var buffers = [];
+  buffers.push( mergeBuffers(recBuffersL, recLength) );
+  buffers.push( mergeBuffers(recBuffersR, recLength) );
+  this.postMessage(buffers);
+}
+
+function clear(){
+  recLength = 0;
+  recBuffersL = [];
+  recBuffersR = [];
+}
+
+function mergeBuffers(recBuffers, recLength){
+  var result = new Float32Array(recLength);
+  var offset = 0;
+  for (var i = 0; i < recBuffers.length; i++){
+    result.set(recBuffers[i], offset);
+    offset += recBuffers[i].length;
+  }
+  return result;
+}
+
+function interleave(inputL, inputR){
+  var length = inputL.length + inputR.length;
+  var result = new Float32Array(length);
+
+  var index = 0,
+    inputIndex = 0;
+
+  while (index < length){
+    result[index++] = inputL[inputIndex];
+    result[index++] = inputR[inputIndex];
+    inputIndex++;
+  }
+  return result;
+}
+
+function floatTo16BitPCM(output, offset, input){
+  for (var i = 0; i < input.length; i++, offset+=2){
+    var s = Math.max(-1, Math.min(1, input[i]));
+    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+}
+
+function writeString(view, offset, string){
+  for (var i = 0; i < string.length; i++){
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+function encodeWAV(samples){
+  var buffer = new ArrayBuffer(44 + samples.length * 2);
+  var view = new DataView(buffer);
+
+  /* RIFF identifier */
+  writeString(view, 0, 'RIFF');
+  /* file length */
+  view.setUint32(4, 32 + samples.length * 2, true);
+  /* RIFF type */
+  writeString(view, 8, 'WAVE');
+  /* format chunk identifier */
+  writeString(view, 12, 'fmt ');
+  /* format chunk length */
+  view.setUint32(16, 16, true);
+  /* sample format (raw) */
+  view.setUint16(20, 1, true);
+  /* channel count */
+  view.setUint16(22, 2, true);
+  /* sample rate */
+  view.setUint32(24, sampleRate, true);
+  /* byte rate (sample rate * block align) */
+  view.setUint32(28, sampleRate * 4, true);
+  /* block align (channel count * bytes per sample) */
+  view.setUint16(32, 4, true);
+  /* bits per sample */
+  view.setUint16(34, 16, true);
+  /* data chunk identifier */
+  writeString(view, 36, 'data');
+  /* data chunk length */
+  view.setUint32(40, samples.length * 2, true);
+
+  floatTo16BitPCM(view, 44, samples);
+
+  return view;
+}
 app.factory('BaseAudioNode', [function(){
   return Class.extend({
     constructor: function(data) {
@@ -3119,134 +3250,3 @@ app.factory('Track', ['BaseAudioNode', 'Arrangement',
   });
 
 }]);
-var recLength = 0,
-  recBuffersL = [],
-  recBuffersR = [],
-  sampleRate;
-
-this.onmessage = function(e){
-  switch(e.data.command){
-    case 'init':
-      init(e.data.config);
-      break;
-    case 'record':
-      record(e.data.buffer);
-      break;
-    case 'exportWAV':
-      exportWAV(e.data.type);
-      break;
-    case 'getBuffer':
-      getBuffer();
-      break;
-    case 'clear':
-      clear();
-      break;
-  }
-};
-
-function init(config){
-  sampleRate = config.sampleRate;
-}
-
-function record(inputBuffer){
-  recBuffersL.push(inputBuffer[0]);
-  recBuffersR.push(inputBuffer[1]);
-  recLength += inputBuffer[0].length;
-}
-
-function exportWAV(type){
-  var bufferL = mergeBuffers(recBuffersL, recLength);
-  var bufferR = mergeBuffers(recBuffersR, recLength);
-  var interleaved = interleave(bufferL, bufferR);
-  var dataview = encodeWAV(interleaved);
-  var audioBlob = new Blob([dataview], { type: type });
-
-  this.postMessage(audioBlob);
-}
-
-function getBuffer() {
-  var buffers = [];
-  buffers.push( mergeBuffers(recBuffersL, recLength) );
-  buffers.push( mergeBuffers(recBuffersR, recLength) );
-  this.postMessage(buffers);
-}
-
-function clear(){
-  recLength = 0;
-  recBuffersL = [];
-  recBuffersR = [];
-}
-
-function mergeBuffers(recBuffers, recLength){
-  var result = new Float32Array(recLength);
-  var offset = 0;
-  for (var i = 0; i < recBuffers.length; i++){
-    result.set(recBuffers[i], offset);
-    offset += recBuffers[i].length;
-  }
-  return result;
-}
-
-function interleave(inputL, inputR){
-  var length = inputL.length + inputR.length;
-  var result = new Float32Array(length);
-
-  var index = 0,
-    inputIndex = 0;
-
-  while (index < length){
-    result[index++] = inputL[inputIndex];
-    result[index++] = inputR[inputIndex];
-    inputIndex++;
-  }
-  return result;
-}
-
-function floatTo16BitPCM(output, offset, input){
-  for (var i = 0; i < input.length; i++, offset+=2){
-    var s = Math.max(-1, Math.min(1, input[i]));
-    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-  }
-}
-
-function writeString(view, offset, string){
-  for (var i = 0; i < string.length; i++){
-    view.setUint8(offset + i, string.charCodeAt(i));
-  }
-}
-
-function encodeWAV(samples){
-  var buffer = new ArrayBuffer(44 + samples.length * 2);
-  var view = new DataView(buffer);
-
-  /* RIFF identifier */
-  writeString(view, 0, 'RIFF');
-  /* file length */
-  view.setUint32(4, 32 + samples.length * 2, true);
-  /* RIFF type */
-  writeString(view, 8, 'WAVE');
-  /* format chunk identifier */
-  writeString(view, 12, 'fmt ');
-  /* format chunk length */
-  view.setUint32(16, 16, true);
-  /* sample format (raw) */
-  view.setUint16(20, 1, true);
-  /* channel count */
-  view.setUint16(22, 2, true);
-  /* sample rate */
-  view.setUint32(24, sampleRate, true);
-  /* byte rate (sample rate * block align) */
-  view.setUint32(28, sampleRate * 4, true);
-  /* block align (channel count * bytes per sample) */
-  view.setUint16(32, 4, true);
-  /* bits per sample */
-  view.setUint16(34, 16, true);
-  /* data chunk identifier */
-  writeString(view, 36, 'data');
-  /* data chunk length */
-  view.setUint32(40, samples.length * 2, true);
-
-  floatTo16BitPCM(view, 44, samples);
-
-  return view;
-}
