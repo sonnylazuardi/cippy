@@ -134,7 +134,8 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.compressor.connect(arrangement.context.destination);
 
   var db = new PouchDB('cippy');
-  var remoteCouch = 'http://localhost:5984/cippy';
+  var remoteCouch = 'http://kabin.id:5984/cippy';
+  
 
   var init = function() {
     // console.log('init');
@@ -189,6 +190,9 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
         // console.log(newValue);
         // console.log(oldValue);
         // console.log(arrangement.doc);
+        console.log(newValue);
+
+        
         db.put(newValue, {conflicts: true});
 
 
