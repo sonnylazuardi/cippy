@@ -139,7 +139,6 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   var localCouch = 'http://localhost:5984/cippy';
   var remoteCouch = 'http://kabin.id:5984/cippy';
   
-
   var init = function() {
     // console.log('init');
     db.get('coba-1').then(function (doc) {
