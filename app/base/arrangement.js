@@ -1,7 +1,8 @@
 app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http){
-
   var arrangement = {
-    doc: {},
+    doc: {
+      tracks: []
+    },
 
     _rev: '',
 
@@ -127,20 +128,20 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   };
 
   arrangement.context = SharedAudioContext.getContext();
-
   arrangement.master = arrangement.context.createGain();
   arrangement.compressor = arrangement.context.createDynamicsCompressor();
   arrangement.master.connect(arrangement.compressor);
   arrangement.compressor.connect(arrangement.context.destination);
 
   var db = new PouchDB('cippy');
-  var remoteCouch = 'http://localhost:5984/cippy';
+  var localCouch = 'http://localhost:5984/cippy';
+  var remoteCouch = 'http://kabin.id:5984/cippy';
   
 
   var init = function() {
     // console.log('init');
-    db.get('2197e37f783d4a9f58793a769b000511').then(function (doc) {
-      console.log(doc);
+    db.get('coba-1').then(function (doc) {
+      // console.log(doc);
       arrangement.doc = doc;
       $rootScope.arrangement = arrangement.doc;
       $rootScope.$emit('sync');
@@ -148,12 +149,14 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   }
 
   var syncing = function(doc) {
-    
-    // console.log('syncing');
     arrangement.doc = doc.doc;
-    $rootScope.arrangement = arrangement.doc;
+
+    $rootScope.$apply(function() {
+      $rootScope.arrangement = arrangement.doc;  
+    });
+        
     $rootScope.$emit('sync');
-    
+    $rootScope.$emit('loadWatcher');
   };
 
   // Initialise a sync with the remote server
@@ -161,18 +164,30 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
     var opts = {live: true, retry: true};
     db.replicate.to(remoteCouch, opts, syncError);
     db.replicate.from(remoteCouch, opts, syncError);
+    // Uncomment for local couch
+    // db.replicate.to(localCouch, opts, syncError);
+    // db.replicate.from(localCouch, opts, syncError);
   }
 
   // There was some form or error syncing
   function syncError() {
-    console.log('syncError');
+    // console.log('syncError');
   }
+
+  // arrangement.doc = JSON.parse(test);
+  // $rootScope.arrangement = arrangement.doc;
+  // $rootScope.$emit('sync');
+
+  db.putIfNotExists('coba-1', {
+    _id: 'coba-1',
+    tracks: []
+  });
 
   db.changes({
     since: 'now',
     live: true,
     include_docs: true,
-    conflicts:true
+    conflicts: true,
   }).on('change', syncing);
 
   if (remoteCouch) {
@@ -180,19 +195,20 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
     sync();
   }
 
-  $rootScope.$watch('arrangement', function(newValue, oldValue){
+  var watchComponent = function(newValue) {
+    var newDoc = newValue;
+    db.put(newDoc, {conflicts: true}).then(function(result) {
+      // console.log(result);
+    }).catch(function(err) {
+      console.log(err);
+    });
+  }
 
+  $rootScope.$watch('arrangement', function(newValue, oldValue){
+    // console.log('CHANGE HAPPEN');
     if (newValue && oldValue) {
       if (newValue._rev == oldValue._rev) {
-
-        console.log('changed');
-
-        // console.log(newValue);
-        // console.log(oldValue);
-        // console.log(arrangement.doc);
-        db.put(newValue, {conflicts: true});
-
-
+          watchComponent(newValue);
       }
     }
   }, true);

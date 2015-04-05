@@ -60,6 +60,11 @@ app.directive('drumPiece', ['$rootScope', 'EditorConfig', 'Drumkits',
 
       renderBeats(scope, canvasElement);
 
+      scope.$on('loadWatcher', function() {
+        console.log(scope.piece);
+        renderBeats(scope, canvasElement);        
+      });
+
       var unwatchPixels = scope.$watch('config.pixelsPerSecond', function(oldv, newv){
         if(oldv != newv)
           renderBeats(scope, canvasElement);

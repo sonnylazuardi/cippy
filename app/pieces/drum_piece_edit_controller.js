@@ -54,6 +54,7 @@ app.controller('DrumPieceEditController', ['$rootScope', '$scope', 'BufferedNode
     };
 
     $scope.changeSlots = function(){
+
       // change the slot length
       var currentPattern = $scope.node[$scope.currentPatternName].data;
       var slots = currentPattern.slots;
@@ -77,14 +78,26 @@ app.controller('DrumPieceEditController', ['$rootScope', '$scope', 'BufferedNode
       });
     };
 
-    // add empty arrays where needed
-    var unwatchCurrentPattern = $scope.$watch('currentPatternName', function(){
+    var currentPatternLoad = function() {
+      console.log('hello2.5');
       var currentPattern = $scope.node[$scope.currentPatternName].data;
       Drumkits.instrumentsForKit($scope.piece.drumType).forEach(function(instrument){
         if(!_.isArray(currentPattern.beats[instrument]))
           currentPattern.beats[instrument] = new Array(currentPattern.slots);
+        else {
+          for (var i = currentPattern.slots - 1; i >= 0; i--) {
+            if (currentPattern.beats[instrument][i] == undefined) {
+              currentPattern.beats[instrument][i] = 0;
+            }
+          };
+        }
       });
-    });
+    }
+
+    // add empty arrays where needed
+    var unwatchCurrentPattern = $scope.$watch('currentPatternName', currentPatternLoad);
+
+    $scope.$on('loadWatcher', currentPatternLoad);
 
     var unwatchPlay = $rootScope.$on('player:play', function(){
       if(machinePlaying){
