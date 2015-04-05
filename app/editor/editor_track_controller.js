@@ -114,7 +114,7 @@ app.controller('EditorTrackController', ['$rootScope', '$scope', 'Track', 'Arran
             }
           });
           break;
-        case 'drums':
+        case 'drums': 
           $scope.track.pieces.push({
             "type": "drum",
             "drumType": "trap",

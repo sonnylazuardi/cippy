@@ -49,7 +49,7 @@ gulp.task('stylus', function() {
 gulp.task('vendor', function() {
   return gulp.src(vendorPath)
     .pipe(concat('vendor.js'))
-    // .pipe(uglify())
+    .pipe(uglify())
     .pipe(gulp.dest('./dist/js/'));
 });
 

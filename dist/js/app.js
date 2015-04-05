@@ -1,8 +1,9 @@
 var app = angular.module('cippy', ['partials', 'ngSanitize']); 
 app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http){
-
   var arrangement = {
-    doc: {},
+    doc: {
+      tracks: []
+    },
 
     _rev: '',
 
@@ -135,13 +136,14 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.compressor.connect(arrangement.context.destination);
 
   var db = new PouchDB('cippy');
+  var localCouch = 'http://localhost:5984/cippy';
   var remoteCouch = 'http://kabin.id:5984/cippy';
   
 
   var init = function() {
     // console.log('init');
-    db.get('2197e37f783d4a9f58793a769b000511').then(function (doc) {
-      console.log(doc);
+    db.get('coba-1').then(function (doc) {
+      // console.log(doc);
       arrangement.doc = doc;
       $rootScope.arrangement = arrangement.doc;
       $rootScope.$emit('sync');
@@ -149,12 +151,14 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   }
 
   var syncing = function(doc) {
-    
-    // console.log('syncing');
     arrangement.doc = doc.doc;
-    $rootScope.arrangement = arrangement.doc;
+
+    $rootScope.$apply(function() {
+      $rootScope.arrangement = arrangement.doc;  
+    });
+        
     $rootScope.$emit('sync');
-    
+    $rootScope.$emit('loadWatcher');
   };
 
   // Initialise a sync with the remote server
@@ -162,18 +166,30 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
     var opts = {live: true, retry: true};
     db.replicate.to(remoteCouch, opts, syncError);
     db.replicate.from(remoteCouch, opts, syncError);
+    // Uncomment for local couch
+    // db.replicate.to(localCouch, opts, syncError);
+    // db.replicate.from(localCouch, opts, syncError);
   }
 
   // There was some form or error syncing
   function syncError() {
-    console.log('syncError');
+    // console.log('syncError');
   }
+
+  // arrangement.doc = JSON.parse(test);
+  // $rootScope.arrangement = arrangement.doc;
+  // $rootScope.$emit('sync');
+
+  db.putIfNotExists('coba-1', {
+    _id: 'coba-1',
+    tracks: []
+  });
 
   db.changes({
     since: 'now',
     live: true,
     include_docs: true,
-    conflicts:true
+    conflicts: true,
   }).on('change', syncing);
 
   if (remoteCouch) {
@@ -181,22 +197,20 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
     sync();
   }
 
-  $rootScope.$watch('arrangement', function(newValue, oldValue){
+  var watchComponent = function(newValue) {
+    var newDoc = newValue;
+    db.put(newDoc, {conflicts: true}).then(function(result) {
+      // console.log(result);
+    }).catch(function(err) {
+      console.log(err);
+    });
+  }
 
+  $rootScope.$watch('arrangement', function(newValue, oldValue){
+    // console.log('CHANGE HAPPEN');
     if (newValue && oldValue) {
       if (newValue._rev == oldValue._rev) {
-
-        console.log('changed');
-
-        // console.log(newValue);
-        // console.log(oldValue);
-        // console.log(arrangement.doc);
-        console.log(newValue);
-
-        
-        db.put(newValue, {conflicts: true});
-
-
+          watchComponent(newValue);
       }
     }
   }, true);
@@ -790,7 +804,10 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
     $rootScope.$on('sync', function(){
       $scope.$apply(function(){
         $scope.arrangement = Arrangement.doc;
-      })
+        // $rootScope.arrangement = Arrangement.doc;
+        // console.log($rootScope.arrangement);
+        // console.log($scope.arrangement);
+      });
     });
 
 });
@@ -994,7 +1011,7 @@ app.controller('EditorTrackController', ['$rootScope', '$scope', 'Track', 'Arran
             }
           });
           break;
-        case 'drums':
+        case 'drums': 
           $scope.track.pieces.push({
             "type": "drum",
             "drumType": "trap",
@@ -1597,8 +1614,7 @@ app.factory('utils', [function(){
     }
   };
 }]);
-app.directive('beatsGrid', ['$compile', 'EditorConfig', 'Drumkits',
-    function($compile, EditorConfig, Drumkits) {
+app.directive('beatsGrid', function($compile, EditorConfig, Drumkits, $rootScope, Arrangement) {
 
   var assignInstruments = function(scope){
     scope.instruments = Drumkits.instrumentsForKit(scope.piece.drumType);
@@ -1609,6 +1625,7 @@ app.directive('beatsGrid', ['$compile', 'EditorConfig', 'Drumkits',
     templateUrl: 'partials/pieces/beats_grid.html',
     link: function(scope, element, attrs){
       assignInstruments(scope);
+
 
       scope.changeBeat = function(instrument, index, oldValue){
         var instrument = scope.node[scope.currentPatternName].data.beats[instrument];
@@ -1624,7 +1641,7 @@ app.directive('beatsGrid', ['$compile', 'EditorConfig', 'Drumkits',
       });
     }
   }
-}]);
+});
 app.controller('BufferedPieceController', ['$rootScope', '$scope', 'BufferedNode', 'Arrangement',
   function($rootScope, $scope, BufferedNode, Arrangement){
 
@@ -1810,8 +1827,7 @@ app.directive('draggablePiece', ['$rootScope', 'EditorConfig', function($rootSco
     }
   }
 }])
-app.controller('DrumPieceController', ['$rootScope', '$scope', 'utils', 'Sampler', 'Arrangement', 'Drumkits',
-  function($rootScope, $scope, utils, Sampler, Arrangement, Drumkits){
+app.controller('DrumPieceController', function($rootScope, $scope, utils, Sampler, Arrangement, Drumkits){
     $scope.node = new Sampler($scope.piece);
     $scope.node.master = $scope.trackNode.in;
     $scope.node.context = $scope.trackNode.context;
@@ -1826,6 +1842,17 @@ app.controller('DrumPieceController', ['$rootScope', '$scope', 'utils', 'Sampler
         Drumkits.loadKit($scope.piece.drumType);
     });
 
+    $rootScope.$on('loadWatcher', function() {
+      $scope.node = new Sampler($scope.piece);
+      $scope.node.master = $scope.trackNode.in;
+      $scope.node.context = $scope.trackNode.context;
+
+      // load the current drum kit
+      Drumkits.loadKit($scope.piece.drumType);
+
+      Arrangement.registerPiece($scope.piece.id, $scope.node);
+    });
+
     $scope.edit = function(){
       $scope.addAdditionalContent('<div drum-piece-edit class="drum-piece-edit-container"></div>', $scope);
     };
@@ -1835,7 +1862,7 @@ app.controller('DrumPieceController', ['$rootScope', '$scope', 'utils', 'Sampler
       Arrangement.removePieceFromTrack($scope.piece, $scope.track);
       $scope.node.stop();
     };
-}]);
+});
 app.directive('drumPiece', ['$rootScope', 'EditorConfig', 'Drumkits',
     function($rootScope, EditorConfig, Drumkits) {
 
@@ -1897,6 +1924,11 @@ app.directive('drumPiece', ['$rootScope', 'EditorConfig', 'Drumkits',
       var canvasElement = angular.element(element[0].querySelector('canvas'));
 
       renderBeats(scope, canvasElement);
+
+      scope.$on('loadWatcher', function() {
+        console.log(scope.piece);
+        renderBeats(scope, canvasElement);        
+      });
 
       var unwatchPixels = scope.$watch('config.pixelsPerSecond', function(oldv, newv){
         if(oldv != newv)
@@ -1971,6 +2003,7 @@ app.controller('DrumPieceEditController', ['$rootScope', '$scope', 'BufferedNode
     };
 
     $scope.changeSlots = function(){
+
       // change the slot length
       var currentPattern = $scope.node[$scope.currentPatternName].data;
       var slots = currentPattern.slots;
@@ -1994,14 +2027,26 @@ app.controller('DrumPieceEditController', ['$rootScope', '$scope', 'BufferedNode
       });
     };
 
-    // add empty arrays where needed
-    var unwatchCurrentPattern = $scope.$watch('currentPatternName', function(){
+    var currentPatternLoad = function() {
+      console.log('hello2.5');
       var currentPattern = $scope.node[$scope.currentPatternName].data;
       Drumkits.instrumentsForKit($scope.piece.drumType).forEach(function(instrument){
         if(!_.isArray(currentPattern.beats[instrument]))
           currentPattern.beats[instrument] = new Array(currentPattern.slots);
+        else {
+          for (var i = currentPattern.slots - 1; i >= 0; i--) {
+            if (currentPattern.beats[instrument][i] == undefined) {
+              currentPattern.beats[instrument][i] = 0;
+            }
+          };
+        }
       });
-    });
+    }
+
+    // add empty arrays where needed
+    var unwatchCurrentPattern = $scope.$watch('currentPatternName', currentPatternLoad);
+
+    $scope.$on('loadWatcher', currentPatternLoad);
 
     var unwatchPlay = $rootScope.$on('player:play', function(){
       if(machinePlaying){

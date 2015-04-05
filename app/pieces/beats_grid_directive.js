@@ -1,5 +1,4 @@
-app.directive('beatsGrid', ['$compile', 'EditorConfig', 'Drumkits',
-    function($compile, EditorConfig, Drumkits) {
+app.directive('beatsGrid', function($compile, EditorConfig, Drumkits, $rootScope, Arrangement) {
 
   var assignInstruments = function(scope){
     scope.instruments = Drumkits.instrumentsForKit(scope.piece.drumType);
@@ -10,6 +9,7 @@ app.directive('beatsGrid', ['$compile', 'EditorConfig', 'Drumkits',
     templateUrl: 'partials/pieces/beats_grid.html',
     link: function(scope, element, attrs){
       assignInstruments(scope);
+
 
       scope.changeBeat = function(instrument, index, oldValue){
         var instrument = scope.node[scope.currentPatternName].data.beats[instrument];
@@ -25,4 +25,4 @@ app.directive('beatsGrid', ['$compile', 'EditorConfig', 'Drumkits',
       });
     }
   }
-}]);
+});
