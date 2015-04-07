@@ -1,4 +1,4 @@
-app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement){
+app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser){
 
   $rootScope.showCommunicationPanel = false;
   $scope.playing = false;
@@ -38,15 +38,15 @@ app.controller('EditorControlsController', function($rootScope, $scope, Schedule
   };
 
   $scope.showFiles = function(){
-    // FileBrowser.show();
+    FileBrowser.show();
   };
 
   $scope.hideFiles = function(){
-    // FileBrowser.hide();
+    FileBrowser.hide();
   };
 
   $scope.isFileBrowserVisible = function(){
-    // return FileBrowser.isVisible();
+    return FileBrowser.isVisible();
   };
 
   $scope.showCommunication = function(){

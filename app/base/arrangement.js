@@ -136,6 +136,7 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   var db = new PouchDB('cippy');
   var localCouch = 'http://localhost:5984/cippy';
   var remoteCouch = 'http://kabin.id:5984/cippy';
+  // var remoteCouch = 'http://couchdb-9fea86.smileupps.com/cippy';
   
 
   var init = function() {

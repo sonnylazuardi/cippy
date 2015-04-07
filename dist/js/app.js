@@ -1,619 +1,4 @@
 var app = angular.module('cippy', ['partials', 'ngSanitize']); 
-app.service('EditorConfig', function(){
-  return {
-    pixelsPerSecond: 50,
-    track_settings_offset: 190
-  }
-});
-app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode){
-
-    $scope.arrangement = Arrangement.doc;
-    $scope.config = EditorConfig;
-
-    $rootScope.$on('sync', function(){
-      $scope.$apply(function(){
-        $scope.arrangement = Arrangement.doc;
-        // $rootScope.arrangement = Arrangement.doc;
-        // console.log($rootScope.arrangement);
-        // console.log($scope.arrangement);
-      });
-    });
-
-});
-app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement){
-
-  $rootScope.showCommunicationPanel = false;
-  $scope.playing = false;
-  $scope.arrangement = Arrangement.doc;
-  $scope.gain = 1;
-
-  $scope.isPlaying = function(){
-    return ($scope.playing ? 'icon-pause' : 'icon-play');
-  };
-
-  $scope.playPause = function(){
-    if($scope.playing)
-      this.pause();
-    else
-      this.play();
-  };
-
-  $scope.play = function(){
-    $scope.playing = true;
-    Scheduler.start();
-  };
-
-  $scope.pause = function(){
-    $scope.playing = false;
-    Scheduler.pause();
-  };
-
-  $scope.stop = function(){
-    $scope.playing = false;
-    $rootScope.$emit('stop');
-    Scheduler.stop();
-  };
-
-  $scope.addTrack = function(type){
-    $scope.showMenu = false;
-    Arrangement.addTrack(type);
-  };
-
-  $scope.showFiles = function(){
-    // FileBrowser.show();
-  };
-
-  $scope.hideFiles = function(){
-    // FileBrowser.hide();
-  };
-
-  $scope.isFileBrowserVisible = function(){
-    // return FileBrowser.isVisible();
-  };
-
-  $scope.showCommunication = function(){
-    $rootScope.showCommunicationPanel = true;
-  };
-
-  $scope.isCommunicationPanelVisible = function(){
-    return $rootScope.showCommunicationPanel === true;
-  };
-
-  // update the gain in the audio node when it changes
-  $scope.$watch('gain',function(){
-    Arrangement.master.gain.value = $scope.gain;
-  });
-
-  // unschedule piece by request
-  $rootScope.$on('force-stop', function(event){
-    $scope.stop();
-  });
-
-});
-app.directive('editorControls', function($templateCache) {
-  return {
-    restrict: 'E',
-    templateUrl: 'partials/editor/controls.html',
-    controller: 'EditorControlsController'
-  }
-
-});
-app.directive('editorTracks', function() {
-  return {
-    restrict: 'E',
-    templateUrl: 'partials/editor/tracks.html'
-  }
-});
-app.controller('EditorTrackController', ['$rootScope', '$scope', 'Track', 'Arrangement', 'IDGenerator',
-  function($rootScope, $scope, Track, Arrangement, IDGenerator){
-    $scope.trackNode = new Track($scope.track);
-    $scope.muted = false;
-    $scope.solo = false;
-
-    // update the gain in the audio node when it changes
-    $scope.$watch('track.gain', function(newValue, oldValue){
-      $scope.trackNode.in.gain.value = parseFloat(newValue, 10);
-    });
-
-    // mute track when another track has been soloed
-    $rootScope.$on('soloed-track', function(event, sendingScope){
-      // if I sent the broadcast, don't handle it
-      if(sendingScope == $scope) return;
-      $scope.solo = false;
-      $scope.trackNode.in.gain.value = 0;
-    });
-
-    // unmute track
-    $rootScope.$on('un-soloed-track', function(){
-      // dont unmute if muting was set specifically
-      if($scope.muted) return;
-      $scope.trackNode.in.gain.value = $scope.track.gain;
-    });
-
-    $scope.toggleMute = function(){
-      if($scope.muted)
-        $scope.unMuteTrack();
-      else
-        $scope.muteTrack();
-    };
-
-    $scope.unMuteTrack = function(){
-      $scope.muted = false;
-      $scope.trackNode.in.gain.value = $scope.track.gain;
-    };
-
-    $scope.muteTrack = function(){
-      $scope.muted = true;
-      $scope.solo = false;
-      $scope.trackNode.in.gain.value = 0;
-    };
-
-    $scope.toggleSolo = function(){
-      if($scope.solo)
-        $scope.unSoloTrack()
-      else
-        $scope.soloTrack()
-    };
-
-    $scope.soloTrack = function(){
-      $scope.solo = true;
-      $scope.unMuteTrack();
-      $rootScope.$broadcast('soloed-track', $scope);
-    };
-
-    $scope.unSoloTrack = function(){
-      $scope.solo = false;
-      $rootScope.$broadcast('un-soloed-track', $scope);
-    };
-
-    $scope.uploadFile = function(file, position){
-      Arrangement.uploadBufferAndAddToTrack(file, $scope.track.id, position);
-    };
-
-    $scope.addBuffer = function(bufferId, position){
-      Arrangement.addBufferToTrack(bufferId, $scope.track.id, position);
-    };
-
-    $scope.addPiece = function(event){
-      switch($scope.track.type){
-        case 'synthesizer':
-          $scope.track.pieces.push({
-            "type": "synthesizer",
-            "position": 0,
-            "id": IDGenerator.generate('synthesizer'),
-            "tones": [],
-            "synthSettings": {
-              "osc1": {
-                "type": "square",
-                "gain": 1,
-                "detune": 0
-              },
-              "osc2": {
-                "type": "sine",
-                "gain": 1,
-                "detune": 0
-              },
-              "osc3": {
-                "type": "triangle",
-                "gain": .5,
-                "detune": 0
-              },
-              "lfo":{
-                "type": "sine",
-                "frequency": 0
-              },
-              "toneEnvelope": {
-                "attack": 0,
-                "decay": 0,
-                "sustain": 1,
-                "release": 0,
-                "boost": 0
-              },
-              "filter": {
-                "frequency": 0,
-                "Q": 0,
-                "gain": 1,
-                "detune": 0,
-                "type": "lowpass",
-                "activate": false
-              }
-            }
-          });
-          break;
-        case 'drums': 
-          $scope.track.pieces.push({
-            "type": "drum",
-            "drumType": "trap",
-            "position": 0,
-            "id": IDGenerator.generate('drums'),
-            "instruments": ["hihat-closed","bass","snare"],
-            "patternOrder": ['a'],
-            "patterns": {
-              a: { 'slots': 16, 'bpm': 100,'beats': {} },
-              b: { 'slots': 16, 'bpm': 100,'beats': {} },
-              c: { 'slots': 16, 'bpm': 100,'beats': {} },
-              d: { 'slots': 16, 'bpm': 100,'beats': {} },
-              e: { 'slots': 16, 'bpm': 100,'beats': {} },
-              f: { 'slots': 16, 'bpm': 100,'beats': {} }
-            }
-          })
-          break;
-        case 'recording':
-          $scope.addAdditionalContent('<div recording-element ng-model="track"></div>', $scope);
-          break;
-      }
-    };
-
-    $scope.addRecordingElement = function(){
-      $scope.addAdditionalContent('<div recording-element ng-model="track"></div>', $scope);
-    };
-
-    $scope.removeTrack = function(){
-      if(confirm("Do you really want to remove this track? (" + $scope.track.title + ")")){
-        var index = $scope.arrangement.tracks.indexOf($scope.track);
-        if(index > -1){
-          $scope.arrangement.tracks.splice(index, 1);
-        }
-      }
-    };
-}]);
-app.directive('editorTrack', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
-  function($rootScope, $compile, EditorConfig, Arrangement) {
-
-  return {
-    restrict: 'E',
-    controller: 'EditorTrackController',
-    templateUrl: 'partials/editor/track.html',
-    link: function(scope, element, attrs){
-      var trackElement = element[0].querySelector('.track');
-
-      trackElement.addEventListener('dragenter', function(event){
-        trackElement.classList.add('drop-here')
-        event.preventDefault()
-        event.stopPropagation();
-        return false;
-      });
-
-      trackElement.addEventListener('dragover', function(event){
-        trackElement.classList.add('drop-here')
-        event.preventDefault()
-        event.stopPropagation();
-        return false;
-      });
-
-      trackElement.addEventListener('dragleave', function(event){
-        trackElement.classList.remove('drop-here');
-        event.preventDefault()
-        event.stopPropagation();
-        return false;
-      });
-
-      trackElement.addEventListener('drop', function(event){
-        trackElement.classList.remove('drop-here');
-
-        // calculate the current position in the track from the drop event
-        var position = (event.x - EditorConfig.track_settings_offset) / EditorConfig.pixelsPerSecond;
-
-        var bufferId = event.dataTransfer.getData('buffer_id');
-
-        // if a bufferId has been set, we don't need to upload
-        if(bufferId){
-          scope.addBuffer(bufferId, position);
-        }else{
-          // upload the dropped files
-          scope.uploadFile(event.dataTransfer.files.item(0), position);
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-        return false;
-      });
-
-      var getAdditionalContentElement = function(){
-        return angular.element(
-          document.getElementById('additional-content-' + scope.track.id)
-        );
-      };
-
-      // compile and render a directive into the additional content div (e.g. a recording view)
-      scope.addAdditionalContent = function(directiveHTML, theScope){
-        var newElement = $compile(directiveHTML)(theScope);
-        var container = scope.removeAdditionalContent();
-        var additionalContentControls =
-          '<div class="additional-content-controls"><button class="topcoat-button" ng-click="removeAdditionalContent()">close</button></div>';
-        var additionalContentControls = $compile(additionalContentControls)(theScope);
-        container.append(newElement);
-        container.append(additionalContentControls);
-      };
-
-      // remove the additional content from the view (e.g. a recording view)
-      scope.removeAdditionalContent = function(){
-        var addContent = getAdditionalContentElement();
-        addContent.html('');
-        return addContent;
-      };
-    }
-  }
-}]);
-app.directive('progressLine', function($rootScope, Scheduler, EditorConfig, Arrangement) {
-
-  var setToCurrentPosition = function(el){
-    var startPosition = Scheduler.songPosition * EditorConfig.pixelsPerSecond + EditorConfig.track_settings_offset;
-    el.removeClass('animated').css('transitionDuration', '0s');
-    _.defer(function(){
-      el.css('left', startPosition + 'px');
-    });
-  };
-
-  var startAnimating = function(el){
-    var endPosition = 0;
-    
-    // select the end position from the most right piece in the DOM
-    var pieces = document.querySelectorAll('.piece');
-    for(var i = 0; i < pieces.length; i++){
-      var pieceElement = pieces[i];
-      var rect = pieceElement.getBoundingClientRect();
-      var $currentRight = rect.left + rect.width;
-      endPosition = $currentRight > endPosition ? $currentRight : endPosition;
-    };
-
-    var duration = Arrangement.length() - Scheduler.songPosition;
-
-    setToCurrentPosition(el);
-    _.defer(function(){
-      el.addClass('animated').removeClass('notAnimated').css({
-        transitionDuration: duration + 's',
-        left: endPosition + 'px'
-      }).one('transitionend', function(){
-        el.removeClass('animated').addClass('notAnimated');
-      });
-    });
-  };
-
-  var stopAnimating = function(el){
-    setToCurrentPosition(el);
-  };
-
-  return {
-    restrict: 'E',
-    template: '<div id="progress-line"></div>',
-    link: function(scope, element, attr){
-      var progressLine = angular.element(document.getElementById('progress-line'));
-      setToCurrentPosition(progressLine);
-
-      $rootScope.$on('player:play', function(){ startAnimating(progressLine); });
-      $rootScope.$on('player:pause', function(){ stopAnimating(progressLine); });
-      $rootScope.$on('player:stop', function(){ stopAnimating(progressLine); });
-      $rootScope.$on('player:position-change', function(){ stopAnimating(progressLine); });
-
-      scope.$watch('config.pixelsPerSecond', function(){ setToCurrentPosition(progressLine); });
-    }
-  }
-});
-app.service('Scheduler', ['$rootScope', 'Ticker', 'Arrangement', function($rootScope, Ticker, Arrangement){
-
-  var scheduler = {
-    /**
-     * Is the scheduler playing the song?
-     * @type {Boolean}
-     */
-    playing: false,
-
-    /**
-     * When has it been started the last time
-     * @type {Number}
-     */
-    startedAt: null,
-
-    /**
-     * When has it been stopped the last time
-     * @type {Number}
-     */
-    stoppedAt: null,
-
-    /**
-     * From which offset should the seon be played?
-     * @type {Number}
-     */
-    from: 0,
-
-    /**
-     * The current position in the song
-     * @type {Number}
-     */
-    songPosition: 0,
-
-    /**
-     * Look-up table for scheduled pieces
-     * @type {Object}
-     */
-    _scheduledPieces: {},
-
-    start: function(from){
-      this.playing = true;
-      from = from || this.songPosition;
-      this.startedAt = Date.now();
-      this.from = from;
-
-      this.schedule();
-      this.ticker.start();
-      $rootScope.$emit('player:play');
-    },
-
-    pause: function(preventEmit){
-      this.playing = false;
-      this.stoppedAt = Date.now();
-      this.songPosition += this.lastDuration();
-      this.ticker.stop();
-      this.unschedulePieces();
-      if(!preventEmit)
-        $rootScope.$emit('player:pause');
-    },
-
-    stop: function(preventEmit){
-      this.playing = false;
-      this.pause(true);
-      this.songPosition = 0;
-      if(!preventEmit)
-        $rootScope.$emit('player:stop');
-    },
-
-    setSongPosition: function(songPos){
-      var continueSong = this.playing;
-      console.log('songPosition', this.songPosition)
-      this.stop(true);
-      this.songPosition = songPos;
-      $rootScope.$emit('player:position-change');
-      if(continueSong)
-        this.start();
-    },
-
-    lastDuration: function(){
-      return (this.stoppedAt - this.startedAt) / 1000;
-    },
-
-    _delta: function(){
-      return (Date.now() - this.startedAt) / 1000;
-    },
-
-    _position: function(){
-      return this._delta() + this.from;
-    },
-
-    /**
-     * Checks if new pieces need to be scheduled
-     */
-    schedule: function(){
-      var position = this._position();
-      var lookAhead = this.lookAhead;
-      var piecePosition = 0;
-      var pieceLength = 0;
-      var pieceInLookahead = false;
-      var pieceInBetween = false;
-
-      // find and schedule the next pieces
-      Arrangement.doc.tracks.forEach(function(track){
-        // only schedule if track contains pieces
-        if(!track.pieces || track.pieces.length == 0) return;
-
-        track.pieces.forEach(function(piece){
-          piecePosition = piece.position;
-          // check if piece is in boundaries
-          // piece shouldn't be playing already
-          pieceInLookahead = position < piecePosition && position + lookAhead >= piecePosition;
-          pieceInBetween = position >= piecePosition && position < piecePosition + this.lengthForPiece(piece);
-
-          // if the current piece is in the lookAhead frame or if the current position lays in it
-          // and the piece has not been scheduled yet, then go on and schedule it
-          if((pieceInLookahead || pieceInBetween) && !this.hasBeenScheduled(piece)){
-            // do we need to delay the start? 
-            var whenToStartPiece = Math.max(piecePosition - position, 0);
-            // is there an offset for the piece?
-            var offset = Math.max(position - piecePosition, 0);
-
-            this.schedulePiece(piece, whenToStartPiece, offset);
-          }
-        }.bind(this));
-      }.bind(this));
-    },
-
-    schedulePiece: function(piece, whenToStartPiece, offset){
-      var piece = Arrangement.getPiece(piece.id);
-      piece.play(whenToStartPiece, offset);
-      this._scheduledPieces[piece.data.id] = piece;
-      console.log('schedule:piece:' + piece.data.id, whenToStartPiece, offset);
-    },
-
-    unschedulePieces: function(){
-      Object.keys(this._scheduledPieces).forEach(function(key){
-        if(this._scheduledPieces[key] && this._scheduledPieces[key].stop)
-          this._scheduledPieces[key].stop();
-      }.bind(this));
-      this._scheduledPieces = {};
-    },
-
-    hasBeenScheduled: function(piece){
-      return this._scheduledPieces[piece.id];
-    },
-
-    lengthForPiece: function(piece){
-      var piece = Arrangement.getPiece(piece.id);
-      if(piece)
-        return piece.length();
-      else
-        return 0;
-    }
-  };
-
-  // setup the ticker which will be used by the scheduler
-  var ticker = new Ticker();
-  ticker.callback = scheduler.schedule.bind(scheduler);
-  scheduler.ticker = ticker;
-
-  // setup the lookahead time (needs to be converted to seconds)
-  scheduler.lookAhead = (3 * ticker.interval) / 1000;
-
-  // unschedule piece by request
-  $rootScope.$on('unschedule', function(event, piece){
-    scheduler._scheduledPieces[piece.id] = false;
-  });
-  
-  return scheduler;
-}]);
-app.directive('timeLine', ['$rootScope', 'Arrangement', 'EditorConfig', 'Scheduler',
-    function($rootScope, Arrangement, EditorConfig, Scheduler) {
-
-  var fillColor = '#888';
-  var height = 15;
-
-  var render = function(canvas){
-    var context = canvas[0].getContext('2d');
-    var length = Arrangement.length();
-    var pixelsPerSecond = EditorConfig.pixelsPerSecond;
-
-    var width = pixelsPerSecond * length;
-    canvas.prop('width', width);
-    canvas.prop('height', height);
-
-    context.clearRect(0,0,width,canvas.prop('height'));
-
-    context.fillStyle = fillColor;
-
-    for(var seconds = 0; seconds <= length; seconds++){
-      context.fillRect(seconds * pixelsPerSecond, 0, 1, height);
-      context.fillRect((seconds + .5) * pixelsPerSecond, 0, 1, height / 2);
-    }
-  };
-
-  // make sure render is not called too often
-  var render = _.debounce(render, 1000);
-
-  var setSongPosition = function(event, element){
-    // get the new song position from the click
-    var rect = element[0].getBoundingClientRect();
-    var newSongPosition = (event.x - rect.left) / EditorConfig.pixelsPerSecond;
-    Scheduler.setSongPosition(newSongPosition);
-  };
-
-  return {
-    restrict: 'E',
-    template: '<div class="time-line"><canvas height="'+ height +'"></canvas></div>',
-    link: function(scope, element, attr){
-      var canvas = element.find('canvas');
-
-      render(canvas);
-
-      scope.$watch('config.pixelsPerSecond', function(newv, oldv){
-        if(newv != oldv) render(canvas);
-      });
-      $rootScope.$on('bufferloader:loaded', function(){ render(canvas); });
-
-      element.on('click', function(event){
-        setSongPosition(event, canvas);
-      });
-    }
-  }
-}]);
 app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http){
   var arrangement = {
     doc: {
@@ -752,6 +137,7 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   var db = new PouchDB('cippy');
   var localCouch = 'http://localhost:5984/cippy';
   var remoteCouch = 'http://kabin.id:5984/cippy';
+  // var remoteCouch = 'http://couchdb-9fea86.smileupps.com/cippy';
   
 
   var init = function() {
@@ -1400,6 +786,682 @@ app.directive('waveForm', ['$rootScope', '$compile', 'EditorConfig',
         if(unwatchPixels) unwatchPixels();
         if(unwatchOffsetStart) unwatchOffsetStart();
         if(unwatchOffsetEnd) unwatchOffsetEnd();
+      });
+    }
+  }
+}]);
+app.service('EditorConfig', function(){
+  return {
+    pixelsPerSecond: 50,
+    track_settings_offset: 190
+  }
+});
+app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode){
+
+    $scope.arrangement = Arrangement.doc;
+    $scope.config = EditorConfig;
+
+    $rootScope.$on('sync', function(){
+      $scope.$apply(function(){
+        $scope.arrangement = Arrangement.doc;
+        // $rootScope.arrangement = Arrangement.doc;
+        // console.log($rootScope.arrangement);
+        // console.log($scope.arrangement);
+      });
+    });
+
+});
+app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser){
+
+  $rootScope.showCommunicationPanel = false;
+  $scope.playing = false;
+  $scope.arrangement = Arrangement.doc;
+  $scope.gain = 1;
+
+  $scope.isPlaying = function(){
+    return ($scope.playing ? 'icon-pause' : 'icon-play');
+  };
+
+  $scope.playPause = function(){
+    if($scope.playing)
+      this.pause();
+    else
+      this.play();
+  };
+
+  $scope.play = function(){
+    $scope.playing = true;
+    Scheduler.start();
+  };
+
+  $scope.pause = function(){
+    $scope.playing = false;
+    Scheduler.pause();
+  };
+
+  $scope.stop = function(){
+    $scope.playing = false;
+    $rootScope.$emit('stop');
+    Scheduler.stop();
+  };
+
+  $scope.addTrack = function(type){
+    $scope.showMenu = false;
+    Arrangement.addTrack(type);
+  };
+
+  $scope.showFiles = function(){
+    FileBrowser.show();
+  };
+
+  $scope.hideFiles = function(){
+    FileBrowser.hide();
+  };
+
+  $scope.isFileBrowserVisible = function(){
+    return FileBrowser.isVisible();
+  };
+
+  $scope.showCommunication = function(){
+    $rootScope.showCommunicationPanel = true;
+  };
+
+  $scope.isCommunicationPanelVisible = function(){
+    return $rootScope.showCommunicationPanel === true;
+  };
+
+  // update the gain in the audio node when it changes
+  $scope.$watch('gain',function(){
+    Arrangement.master.gain.value = $scope.gain;
+  });
+
+  // unschedule piece by request
+  $rootScope.$on('force-stop', function(event){
+    $scope.stop();
+  });
+
+});
+app.directive('editorControls', function($templateCache) {
+  return {
+    restrict: 'E',
+    templateUrl: 'partials/editor/controls.html',
+    controller: 'EditorControlsController'
+  }
+
+});
+app.directive('editorTracks', function() {
+  return {
+    restrict: 'E',
+    templateUrl: 'partials/editor/tracks.html'
+  }
+});
+app.controller('EditorTrackController', ['$rootScope', '$scope', 'Track', 'Arrangement', 'IDGenerator',
+  function($rootScope, $scope, Track, Arrangement, IDGenerator){
+    $scope.trackNode = new Track($scope.track);
+    $scope.muted = false;
+    $scope.solo = false;
+
+    // update the gain in the audio node when it changes
+    $scope.$watch('track.gain', function(newValue, oldValue){
+      $scope.trackNode.in.gain.value = parseFloat(newValue, 10);
+    });
+
+    // mute track when another track has been soloed
+    $rootScope.$on('soloed-track', function(event, sendingScope){
+      // if I sent the broadcast, don't handle it
+      if(sendingScope == $scope) return;
+      $scope.solo = false;
+      $scope.trackNode.in.gain.value = 0;
+    });
+
+    // unmute track
+    $rootScope.$on('un-soloed-track', function(){
+      // dont unmute if muting was set specifically
+      if($scope.muted) return;
+      $scope.trackNode.in.gain.value = $scope.track.gain;
+    });
+
+    $scope.toggleMute = function(){
+      if($scope.muted)
+        $scope.unMuteTrack();
+      else
+        $scope.muteTrack();
+    };
+
+    $scope.unMuteTrack = function(){
+      $scope.muted = false;
+      $scope.trackNode.in.gain.value = $scope.track.gain;
+    };
+
+    $scope.muteTrack = function(){
+      $scope.muted = true;
+      $scope.solo = false;
+      $scope.trackNode.in.gain.value = 0;
+    };
+
+    $scope.toggleSolo = function(){
+      if($scope.solo)
+        $scope.unSoloTrack()
+      else
+        $scope.soloTrack()
+    };
+
+    $scope.soloTrack = function(){
+      $scope.solo = true;
+      $scope.unMuteTrack();
+      $rootScope.$broadcast('soloed-track', $scope);
+    };
+
+    $scope.unSoloTrack = function(){
+      $scope.solo = false;
+      $rootScope.$broadcast('un-soloed-track', $scope);
+    };
+
+    $scope.uploadFile = function(file, position){
+      Arrangement.uploadBufferAndAddToTrack(file, $scope.track.id, position);
+    };
+
+    $scope.addBuffer = function(bufferId, position){
+      Arrangement.addBufferToTrack(bufferId, $scope.track.id, position);
+    };
+
+    $scope.addPiece = function(event){
+      switch($scope.track.type){
+        case 'synthesizer':
+          $scope.track.pieces.push({
+            "type": "synthesizer",
+            "position": 0,
+            "id": IDGenerator.generate('synthesizer'),
+            "tones": [],
+            "synthSettings": {
+              "osc1": {
+                "type": "square",
+                "gain": 1,
+                "detune": 0
+              },
+              "osc2": {
+                "type": "sine",
+                "gain": 1,
+                "detune": 0
+              },
+              "osc3": {
+                "type": "triangle",
+                "gain": .5,
+                "detune": 0
+              },
+              "lfo":{
+                "type": "sine",
+                "frequency": 0
+              },
+              "toneEnvelope": {
+                "attack": 0,
+                "decay": 0,
+                "sustain": 1,
+                "release": 0,
+                "boost": 0
+              },
+              "filter": {
+                "frequency": 0,
+                "Q": 0,
+                "gain": 1,
+                "detune": 0,
+                "type": "lowpass",
+                "activate": false
+              }
+            }
+          });
+          break;
+        case 'drums': 
+          $scope.track.pieces.push({
+            "type": "drum",
+            "drumType": "trap",
+            "position": 0,
+            "id": IDGenerator.generate('drums'),
+            "instruments": ["hihat-closed","bass","snare"],
+            "patternOrder": ['a'],
+            "patterns": {
+              a: { 'slots': 16, 'bpm': 100,'beats': {} },
+              b: { 'slots': 16, 'bpm': 100,'beats': {} },
+              c: { 'slots': 16, 'bpm': 100,'beats': {} },
+              d: { 'slots': 16, 'bpm': 100,'beats': {} },
+              e: { 'slots': 16, 'bpm': 100,'beats': {} },
+              f: { 'slots': 16, 'bpm': 100,'beats': {} }
+            }
+          })
+          break;
+        case 'recording':
+          $scope.addAdditionalContent('<div recording-element ng-model="track"></div>', $scope);
+          break;
+      }
+    };
+
+    $scope.addRecordingElement = function(){
+      $scope.addAdditionalContent('<div recording-element ng-model="track"></div>', $scope);
+    };
+
+    $scope.removeTrack = function(){
+      if(confirm("Do you really want to remove this track? (" + $scope.track.title + ")")){
+        var index = $scope.arrangement.tracks.indexOf($scope.track);
+        if(index > -1){
+          $scope.arrangement.tracks.splice(index, 1);
+        }
+      }
+    };
+}]);
+app.directive('editorTrack', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
+  function($rootScope, $compile, EditorConfig, Arrangement) {
+
+  return {
+    restrict: 'E',
+    controller: 'EditorTrackController',
+    templateUrl: 'partials/editor/track.html',
+    link: function(scope, element, attrs){
+      var trackElement = element[0].querySelector('.track');
+
+      trackElement.addEventListener('dragenter', function(event){
+        trackElement.classList.add('drop-here')
+        event.preventDefault()
+        event.stopPropagation();
+        return false;
+      });
+
+      trackElement.addEventListener('dragover', function(event){
+        trackElement.classList.add('drop-here')
+        event.preventDefault()
+        event.stopPropagation();
+        return false;
+      });
+
+      trackElement.addEventListener('dragleave', function(event){
+        trackElement.classList.remove('drop-here');
+        event.preventDefault()
+        event.stopPropagation();
+        return false;
+      });
+
+      trackElement.addEventListener('drop', function(event){
+        trackElement.classList.remove('drop-here');
+
+        // calculate the current position in the track from the drop event
+        var position = (event.x - EditorConfig.track_settings_offset) / EditorConfig.pixelsPerSecond;
+
+        var bufferId = event.dataTransfer.getData('buffer_id');
+
+        // if a bufferId has been set, we don't need to upload
+        if(bufferId){
+          scope.addBuffer(bufferId, position);
+        }else{
+          // upload the dropped files
+          scope.uploadFile(event.dataTransfer.files.item(0), position);
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      });
+
+      var getAdditionalContentElement = function(){
+        return angular.element(
+          document.getElementById('additional-content-' + scope.track.id)
+        );
+      };
+
+      // compile and render a directive into the additional content div (e.g. a recording view)
+      scope.addAdditionalContent = function(directiveHTML, theScope){
+        var newElement = $compile(directiveHTML)(theScope);
+        var container = scope.removeAdditionalContent();
+        var additionalContentControls =
+          '<div class="additional-content-controls"><button class="topcoat-button" ng-click="removeAdditionalContent()">close</button></div>';
+        var additionalContentControls = $compile(additionalContentControls)(theScope);
+        container.append(newElement);
+        container.append(additionalContentControls);
+      };
+
+      // remove the additional content from the view (e.g. a recording view)
+      scope.removeAdditionalContent = function(){
+        var addContent = getAdditionalContentElement();
+        addContent.html('');
+        return addContent;
+      };
+    }
+  }
+}]);
+app.service('FileBrowser', ['$rootScope', function($rootScope){
+  var showFileBrowser = false;
+  var activeFile = '';
+
+  return {
+    show: function(){
+      showFileBrowser = true;
+    },
+
+    setActiveFile: function(fileName){
+      activeFile = fileName;
+    },
+
+    hide: function(){
+      showFileBrowser = false;
+      activeFile = '';
+    },
+
+    isVisible: function(){
+      return showFileBrowser == true;
+    },
+
+    activeFileName: function(){
+      return activeFile;
+    }
+  }
+}]);
+app.controller('FileBrowserController', ['$rootScope', '$scope', 'Arrangement', 'FileBrowser',
+  function($rootScope, $scope, Arrangement, FileBrowser){
+
+    $rootScope.$on('synced', function(){
+      $scope.files = Arrangement.doc.buffers;
+    });
+
+    $scope.removeBuffer = function(buffer){
+      Arrangement.removeBuffer(buffer);
+    };
+
+    $scope.hideFileBrowser = function(){
+      FileBrowser.hide();
+    };
+
+    $scope.isActiveFile = function(fileName){
+      return FileBrowser.activeFileName() == fileName;
+    };
+}]);
+app.directive('fileBrowser', function() {
+  return {
+    restrict: 'A',
+    controller: 'FileBrowserController',
+    templateUrl: 'partials/editor/file-browser.html',
+    link: function(scope, element, attr){
+
+      // one of the draggable elements is being dragged
+      element[0].addEventListener('dragstart', function(event){
+        var bufferId = event.target.attributes['data-buffer-id'].value;
+        event.dataTransfer.setData('buffer_id', bufferId);
+      });
+    }
+  }
+});
+app.directive('progressLine', function($rootScope, Scheduler, EditorConfig, Arrangement) {
+
+  var setToCurrentPosition = function(el){
+    var startPosition = Scheduler.songPosition * EditorConfig.pixelsPerSecond + EditorConfig.track_settings_offset;
+    el.removeClass('animated').css('transitionDuration', '0s');
+    _.defer(function(){
+      el.css('left', startPosition + 'px');
+    });
+  };
+
+  var startAnimating = function(el){
+    var endPosition = 0;
+    
+    // select the end position from the most right piece in the DOM
+    var pieces = document.querySelectorAll('.piece');
+    for(var i = 0; i < pieces.length; i++){
+      var pieceElement = pieces[i];
+      var rect = pieceElement.getBoundingClientRect();
+      var $currentRight = rect.left + rect.width;
+      endPosition = $currentRight > endPosition ? $currentRight : endPosition;
+    };
+
+    var duration = Arrangement.length() - Scheduler.songPosition;
+
+    setToCurrentPosition(el);
+    _.defer(function(){
+      el.addClass('animated').removeClass('notAnimated').css({
+        transitionDuration: duration + 's',
+        left: endPosition + 'px'
+      }).one('transitionend', function(){
+        el.removeClass('animated').addClass('notAnimated');
+      });
+    });
+  };
+
+  var stopAnimating = function(el){
+    setToCurrentPosition(el);
+  };
+
+  return {
+    restrict: 'E',
+    template: '<div id="progress-line"></div>',
+    link: function(scope, element, attr){
+      var progressLine = angular.element(document.getElementById('progress-line'));
+      setToCurrentPosition(progressLine);
+
+      $rootScope.$on('player:play', function(){ startAnimating(progressLine); });
+      $rootScope.$on('player:pause', function(){ stopAnimating(progressLine); });
+      $rootScope.$on('player:stop', function(){ stopAnimating(progressLine); });
+      $rootScope.$on('player:position-change', function(){ stopAnimating(progressLine); });
+
+      scope.$watch('config.pixelsPerSecond', function(){ setToCurrentPosition(progressLine); });
+    }
+  }
+});
+app.service('Scheduler', ['$rootScope', 'Ticker', 'Arrangement', function($rootScope, Ticker, Arrangement){
+
+  var scheduler = {
+    /**
+     * Is the scheduler playing the song?
+     * @type {Boolean}
+     */
+    playing: false,
+
+    /**
+     * When has it been started the last time
+     * @type {Number}
+     */
+    startedAt: null,
+
+    /**
+     * When has it been stopped the last time
+     * @type {Number}
+     */
+    stoppedAt: null,
+
+    /**
+     * From which offset should the seon be played?
+     * @type {Number}
+     */
+    from: 0,
+
+    /**
+     * The current position in the song
+     * @type {Number}
+     */
+    songPosition: 0,
+
+    /**
+     * Look-up table for scheduled pieces
+     * @type {Object}
+     */
+    _scheduledPieces: {},
+
+    start: function(from){
+      this.playing = true;
+      from = from || this.songPosition;
+      this.startedAt = Date.now();
+      this.from = from;
+
+      this.schedule();
+      this.ticker.start();
+      $rootScope.$emit('player:play');
+    },
+
+    pause: function(preventEmit){
+      this.playing = false;
+      this.stoppedAt = Date.now();
+      this.songPosition += this.lastDuration();
+      this.ticker.stop();
+      this.unschedulePieces();
+      if(!preventEmit)
+        $rootScope.$emit('player:pause');
+    },
+
+    stop: function(preventEmit){
+      this.playing = false;
+      this.pause(true);
+      this.songPosition = 0;
+      if(!preventEmit)
+        $rootScope.$emit('player:stop');
+    },
+
+    setSongPosition: function(songPos){
+      var continueSong = this.playing;
+      console.log('songPosition', this.songPosition)
+      this.stop(true);
+      this.songPosition = songPos;
+      $rootScope.$emit('player:position-change');
+      if(continueSong)
+        this.start();
+    },
+
+    lastDuration: function(){
+      return (this.stoppedAt - this.startedAt) / 1000;
+    },
+
+    _delta: function(){
+      return (Date.now() - this.startedAt) / 1000;
+    },
+
+    _position: function(){
+      return this._delta() + this.from;
+    },
+
+    /**
+     * Checks if new pieces need to be scheduled
+     */
+    schedule: function(){
+      var position = this._position();
+      var lookAhead = this.lookAhead;
+      var piecePosition = 0;
+      var pieceLength = 0;
+      var pieceInLookahead = false;
+      var pieceInBetween = false;
+
+      // find and schedule the next pieces
+      Arrangement.doc.tracks.forEach(function(track){
+        // only schedule if track contains pieces
+        if(!track.pieces || track.pieces.length == 0) return;
+
+        track.pieces.forEach(function(piece){
+          piecePosition = piece.position;
+          // check if piece is in boundaries
+          // piece shouldn't be playing already
+          pieceInLookahead = position < piecePosition && position + lookAhead >= piecePosition;
+          pieceInBetween = position >= piecePosition && position < piecePosition + this.lengthForPiece(piece);
+
+          // if the current piece is in the lookAhead frame or if the current position lays in it
+          // and the piece has not been scheduled yet, then go on and schedule it
+          if((pieceInLookahead || pieceInBetween) && !this.hasBeenScheduled(piece)){
+            // do we need to delay the start? 
+            var whenToStartPiece = Math.max(piecePosition - position, 0);
+            // is there an offset for the piece?
+            var offset = Math.max(position - piecePosition, 0);
+
+            this.schedulePiece(piece, whenToStartPiece, offset);
+          }
+        }.bind(this));
+      }.bind(this));
+    },
+
+    schedulePiece: function(piece, whenToStartPiece, offset){
+      var piece = Arrangement.getPiece(piece.id);
+      piece.play(whenToStartPiece, offset);
+      this._scheduledPieces[piece.data.id] = piece;
+      console.log('schedule:piece:' + piece.data.id, whenToStartPiece, offset);
+    },
+
+    unschedulePieces: function(){
+      Object.keys(this._scheduledPieces).forEach(function(key){
+        if(this._scheduledPieces[key] && this._scheduledPieces[key].stop)
+          this._scheduledPieces[key].stop();
+      }.bind(this));
+      this._scheduledPieces = {};
+    },
+
+    hasBeenScheduled: function(piece){
+      return this._scheduledPieces[piece.id];
+    },
+
+    lengthForPiece: function(piece){
+      var piece = Arrangement.getPiece(piece.id);
+      if(piece)
+        return piece.length();
+      else
+        return 0;
+    }
+  };
+
+  // setup the ticker which will be used by the scheduler
+  var ticker = new Ticker();
+  ticker.callback = scheduler.schedule.bind(scheduler);
+  scheduler.ticker = ticker;
+
+  // setup the lookahead time (needs to be converted to seconds)
+  scheduler.lookAhead = (3 * ticker.interval) / 1000;
+
+  // unschedule piece by request
+  $rootScope.$on('unschedule', function(event, piece){
+    scheduler._scheduledPieces[piece.id] = false;
+  });
+  
+  return scheduler;
+}]);
+app.directive('timeLine', ['$rootScope', 'Arrangement', 'EditorConfig', 'Scheduler',
+    function($rootScope, Arrangement, EditorConfig, Scheduler) {
+
+  var fillColor = '#888';
+  var height = 15;
+
+  var render = function(canvas){
+    var context = canvas[0].getContext('2d');
+    var length = Arrangement.length();
+    var pixelsPerSecond = EditorConfig.pixelsPerSecond;
+
+    var width = pixelsPerSecond * length;
+    canvas.prop('width', width);
+    canvas.prop('height', height);
+
+    context.clearRect(0,0,width,canvas.prop('height'));
+
+    context.fillStyle = fillColor;
+
+    for(var seconds = 0; seconds <= length; seconds++){
+      context.fillRect(seconds * pixelsPerSecond, 0, 1, height);
+      context.fillRect((seconds + .5) * pixelsPerSecond, 0, 1, height / 2);
+    }
+  };
+
+  // make sure render is not called too often
+  var render = _.debounce(render, 1000);
+
+  var setSongPosition = function(event, element){
+    // get the new song position from the click
+    var rect = element[0].getBoundingClientRect();
+    var newSongPosition = (event.x - rect.left) / EditorConfig.pixelsPerSecond;
+    Scheduler.setSongPosition(newSongPosition);
+  };
+
+  return {
+    restrict: 'E',
+    template: '<div class="time-line"><canvas height="'+ height +'"></canvas></div>',
+    link: function(scope, element, attr){
+      var canvas = element.find('canvas');
+
+      render(canvas);
+
+      scope.$watch('config.pixelsPerSecond', function(newv, oldv){
+        if(newv != oldv) render(canvas);
+      });
+      $rootScope.$on('bufferloader:loaded', function(){ render(canvas); });
+
+      element.on('click', function(event){
+        setSongPosition(event, canvas);
       });
     }
   }
