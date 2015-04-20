@@ -14,8 +14,11 @@
 
     <button class="topcoat-button record-mock">Record</button>
 
+    <button class="topcoat-button profile" ng-click="showCommunication()">
+      <img class="profile-picture" ng-src="{{user.picture}}"> {{user.displayName}}
+    </button>
+
     <button class="topcoat-button file-browser" ng-click="showFiles()">File Browser</button>
-    <button class="topcoat-button communication-panel" ng-click="showCommunication()">Communication</button>
 
     <div ng-show="isFileBrowserVisible()" file-browser id="file-browser"></div>
     <div ng-show="isCommunicationPanelVisible()" communication-panel id="communication-panel"></div>
@@ -27,6 +30,5 @@
       <li ng-click="addTrack('synthesizer')">Synthesizer</li>
     </ul>
     
-
   </div>
 </div>

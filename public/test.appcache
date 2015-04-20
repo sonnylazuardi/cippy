@@ -1,0 +1,16 @@
+CACHE MANIFEST
+# v1 - 2015-04-14
+# Cippy audio cache.
+/index.html
+/dist/js/app.js
+/dist/js/partials.js
+/dist/js/vendor.js
+/dist/css/skeleton.css
+/dist/css/font-awesome.css
+/dist/css/vendor.css
+/dist/css/app.css
+/dist/sounds/drumkits/trap.wav
+/dist/sounds/drumkits/regular.wav
+/dist/font/fontello.woff
+/dist/font/SourceSansPro-Regular.otf
+/dist/images/logo.png

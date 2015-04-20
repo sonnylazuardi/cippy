@@ -1,0 +1,22 @@
+<div class="menu-header">
+  <span>Chatting</span>
+  <span class="icon-cancel close" ng-click="hideCommunicationPanel()"></span>
+</div>
+
+<div class="communication-panel-streams">
+  <form ng-submit="send()">
+    <img class="profile-picture large" ng-src="{{user.picture}}">
+    <input type="text" class="topcoat-text-input--large chat-input" placeholder="Input message here..." ng-model="message">
+    <button type="submit" class="topcoat-button--large--cta chat-button">Send</button>
+    <button class="topcoat-button--large chat-button" ui-sref="logout">Logout</button>
+  </form>
+
+  <ul class="chats">
+    <li ng-repeat="chat in chats">
+      <img class="profile-picture large" ng-src="{{chat.user.picture}}">
+      <div class="name">{{chat.user.displayName}}</div>
+      <small time number="chat.time" class="date"></small>
+      <p>{{chat.content}}</p>
+    </li>
+  </ul>
+</div>

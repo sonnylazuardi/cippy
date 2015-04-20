@@ -1,7 +1,7 @@
 /**
  * Caches and optimizes loading of buffers
  */
-app.service('BufferLoader', ['$q', '$rootScope', 'SharedAudioContext', function($q, $rootScope, SharedAudioContext){
+app.service('BufferLoader', function($q, $rootScope, SharedAudioContext, AudioCache){
   return {
     _cache: {},
 
@@ -40,6 +40,8 @@ app.service('BufferLoader', ['$q', '$rootScope', 'SharedAudioContext', function(
       var xhr = new XMLHttpRequest();
       xhr.open('GET', bufferLocation, true);
       xhr.responseType = 'arraybuffer';
+      xhr.addEventListener("error",  this._transferFailed(bufferLocation, deferred), false);
+      xhr.addEventListener("load", this._transferComplete(bufferLocation, deferred), false);
       xhr.onload = function(e) {
         this._decodeAudio(xhr.response, deferred, bufferLocation);
       }.bind(this);
@@ -48,10 +50,73 @@ app.service('BufferLoader', ['$q', '$rootScope', 'SharedAudioContext', function(
       return deferred.promise;
     },
 
+    _transferFailed: function(bufferLocation, deferred) {
+      var self = this;
+      // alert("An error occurred while transferring the file.");
+      var splitter = bufferLocation.split('/');
+      AudioCache.getCache(splitter[3]).then(function (result) {
+        // var arrayBuffer;
+        // var fileReader = new FileReader();
+        // fileReader.onload = function() {
+
+            function ab2str(buf) {
+              return String.fromCharCode.apply(null, new Uint16Array(buf));
+            }
+            function str2ab(str) {
+              var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
+              var bufView = new Uint16Array(buf);
+              for (var i=0, strLen=str.length; i < strLen; i++) {
+                bufView[i] = str.charCodeAt(i);
+              }
+              return buf;
+            }
+            // console.log(result);
+            // var base64String = Base64Binary.decodeArrayBuffer(result);
+            // console.log('SAPI');
+            // console.log(base64String);
+            // arrayBuffer = this.result;
+            // console.log("SAPI");
+            // console.log(ab2str(result));
+            self._decodeAudio(result, deferred, bufferLocation);
+        // };
+        // console.log(result);
+        // fileReader.readAsArrayBuffer(result);
+        // return this._decodeAudio()
+      });
+    
+      // AudioCache.putCache(bufferLocation, splitter[3]);
+    },
+
+    _transferComplete: function(bufferLocation) {
+      // var def = $q.defer();
+      // alert("An error occurred while transferring the file.");
+      var splitter = bufferLocation.split('/');
+      AudioCache.putCache(bufferLocation, splitter[3]);
+      
+      // return def.promise;
+      // AudioCache.putCache(bufferLocation, splitter[3]);
+    },
+
+
     /**
      * Decoded's the audio, caches the buffer and resolves the deferreds
      */
     _decodeAudio: function(arrayBuffer, deferred, bufferLocation){
+      function ab2str(buf) {
+        return String.fromCharCode.apply(null, new Uint16Array(buf));
+      }
+      function str2ab(str) {
+        var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
+        var bufView = new Uint16Array(buf);
+        for (var i=0, strLen=str.length; i < strLen; i++) {
+          bufView[i] = str.charCodeAt(i);
+        }
+        return buf;
+      }
+      // console.log('ONTA');
+      // console.log(ab2str(arrayBuffer));
+      // console.log("SAPI");
+      // console.log(ab2str(result));
       SharedAudioContext.getContext().decodeAudioData(arrayBuffer, function(buffer) {
         this._deferreds[bufferLocation] = undefined;
         this._cache[bufferLocation] = buffer;
@@ -62,4 +127,4 @@ app.service('BufferLoader', ['$q', '$rootScope', 'SharedAudioContext', function(
       });
     }
   };
-}]);
+});
