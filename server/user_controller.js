@@ -4,8 +4,15 @@ var qs = require('querystring');
 var moment = require('moment');
 var request = require('request');
 var PouchDB = require('pouchdb');
-var db = new PouchDB('http://kabin.id:5984/cippy');
-var UserDB = new PouchDB('http://kabin.id:5984/cippy_users');
+
+var CouchURL = 'http://kabin.id:5984/';
+var _ArrangementDB = 'cippy';
+var _ChatDB = 'cippy_chats';
+var _UserDB = 'cippy_users';
+
+
+var db = new PouchDB(CouchURL + _ArrangementDB);
+var UserDB = new PouchDB(CouchURL + _UserDB);
 
 function ensureAuthenticated(req, res, next) {
   if (!req.headers.authorization) {

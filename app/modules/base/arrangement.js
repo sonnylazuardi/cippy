@@ -1,8 +1,10 @@
-app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, ArrangementID){
+app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, ArrangementID, CouchURL, _ArrangementDB, $interval){
+  var self = this;
   var arrangement_id = ArrangementID;
   var timeInit = 0;
   var timeSend = 0;
   var timeReceive = 0;
+  self.stackCounter = 0;
   var arrangement = {
     doc: {},
 
@@ -135,13 +137,9 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.master.connect(arrangement.compressor);
   arrangement.compressor.connect(arrangement.context.destination);
 
-  var db = new PouchDB('cippy');
-  var localCouch = 'http://localhost:5984/cippy';
-  var remoteCouch = 'http://kabin.id:5984/cippy';
-  // var remoteCouch = 'http://couchdb-9fea86.smileupps.com/cippy';
+  var db = new PouchDB(_ArrangementDB);
   
   var init = function() {
-    // console.log('init');
     var newDoc = {
       _id: arrangement_id,
       tracks: [],
@@ -150,12 +148,10 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
     db.putIfNotExists(arrangement_id, newDoc);
 
     db.get(arrangement_id).then(function (doc) {
-      // console.log(doc);
       arrangement.doc = doc;
       $rootScope.arrangement = arrangement.doc;
       console.log('init');
       console.log(window.performance.now() + window.performance.timing.navigationStart);
-      // timeInit = window.performance.now();
 
       $rootScope.$emit('sync');
       $rootScope.$emit('synced');
@@ -167,16 +163,22 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   }
 
   var syncing = function(doc) {
-    arrangement.doc = doc.doc;
+    console.log(self.stackCounter);
+    if (self.stackCounter == 0) {
+      arrangement.temp = false;
+      arrangement.doc = doc.doc;
+    } else {
+      if (self.stackCounter > 0)
+        self.stackCounter--;
+      arrangement.doc._rev = doc.doc._rev;
+    }
 
     $rootScope.$apply(function() {
       $rootScope.arrangement = arrangement.doc;  
     });
        
-    console.log('receive');
+    console.log('sync-receive');
     console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // timeReceive = window.performance.now() - timeInit;
-    // console.log(timeReceive);
 
     $rootScope.$emit('sync');
     $rootScope.$emit('synced');
@@ -186,50 +188,66 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   // Initialise a sync with the remote server
   function sync() {
     var opts = {live: true, retry: true};
-    db.sync(remoteCouch, opts);
-    // db.replicate.to(remoteCouch, opts, syncError);
-    // db.replicate.from(remoteCouch, opts, syncError);
-    // Uncomment for local couch
-    // db.replicate.to(localCouch, opts, syncError);
-    // db.replicate.from(localCouch, opts, syncError);
+    db.sync(CouchURL + _ArrangementDB, opts);
   }
 
   // There was some form or error syncing
   function syncError() {
-    // console.log('syncError');
+    console.log('syncError');
   }
 
-  // arrangement.doc = JSON.parse(test);
-  // $rootScope.arrangement = arrangement.doc;
-  // $rootScope.$emit('sync');
   db.changes({
     since: 'now',
     live: true,
     include_docs: true,
     conflicts: true,
   }).on('change', syncing);
+  
+  init();
+  sync();
 
-  if (remoteCouch) {
-    init();
-    sync();
-  }
+  // SOCKET
+
+  var socket = io();
+
+  socket.on('replicate', function (data) {
+    console.log('===STREAM COMING===');
+    console.log('receive');
+    console.log(window.performance.now() + window.performance.timing.navigationStart);
+    data.temp = true;
+    arrangement.doc = data;
+    self.stackCounter++;
+
+    $rootScope.$apply(function() {
+      $rootScope.arrangement = arrangement.doc;  
+    });
+
+    $rootScope.$emit('sync');
+    $rootScope.$emit('synced');
+    $rootScope.$emit('loadWatcher');
+  });
+
+  // SOCKET
 
   var watchComponent = function(newValue) {
     var newDoc = newValue;
-    console.log('send');
-    console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // timeSend = window.performance.now() - timeInit;
-    // console.log(timeSend);
 
-    db.put(newDoc, {conflicts: true}).then(function(result) {
-      // console.log(result);
-    }).catch(function(err) {
-      console.log(err);
-    });
+    if (!newDoc.temp) {
+      console.log('send');
+      console.log(window.performance.now() + window.performance.timing.navigationStart);
+      newDoc.temp = false;
+      self.stackCounter++;
+      db.put(newDoc, {conflicts: true}).then(function(result) {
+        self.stackCounter--;
+      }).catch(function(err) {
+        console.log(err);
+      });  
+
+      socket.emit('replicate', newDoc);
+    }
   }
 
   $rootScope.$watch('arrangement', function(newValue, oldValue){
-    // console.log('CHANGE HAPPEN');
     if (newValue && oldValue) {
       if (newValue._rev == oldValue._rev) {
           watchComponent(newValue);
@@ -239,4 +257,5 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
 
   return arrangement;
 });
+
 

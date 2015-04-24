@@ -49,6 +49,7 @@ app.service('AudioCache', function($http, $q) {
   };
 
   self.saveFile = function(filename, content) {
+    if (self.filesystem === null) return;
     self.filesystem.root.getFile(filename, {create: true}, function(fileEntry) {
 
       fileEntry.createWriter(function(fileWriter) {
@@ -80,6 +81,7 @@ app.service('AudioCache', function($http, $q) {
   };
 
   self.loadFile = function(filename, success) {
+    if (self.filesystem === null) return;
     self.filesystem.root.getFile(filename, {}, function(fileEntry) {
 
       fileEntry.file(function(file) {
@@ -109,7 +111,12 @@ app.service('AudioCache', function($http, $q) {
     });
   };
 
-  self.initFileSystem();
+  // Start the app by requesting a FileSystem (if the browser supports the API)
+  if (window.requestFileSystem) {
+    self.initFileSystem();
+  } else {
+    alert('Sorry! Your browser doesn\'t support the FileSystem API :(');
+  }
 
   return self;
 });

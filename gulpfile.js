@@ -9,7 +9,6 @@ var nib         = require('nib');
 var vendorPath  = [
   './vendor/js/angular.js',
   './vendor/js/angular-sanitize.js',
-  './vendor/js/pouchdb.js',
   './vendor/js/moment.js',
   './vendor/js/*.js'
 ];

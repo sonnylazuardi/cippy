@@ -1,6 +1,6 @@
-app.factory('Chat', function() {
-  var remote = 'http://kabin.id:5984/cippy_chats';
-  var ChatDB = new PouchDB('cippy_chats');
+app.factory('Chat', function(CouchURL, _ChatDB) {
+  var remote = CouchURL + _ChatDB;
+  var ChatDB = new PouchDB(_ChatDB);
   var opts = {live: true, retry: true};
   var self = this;
   self.scope = {};

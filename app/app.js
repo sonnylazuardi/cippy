@@ -6,6 +6,9 @@ var app = angular.module('cippy', [
 ]); 
 
 app.constant('ArrangementID', 'dokumenmusik');
+app.constant('CouchURL', 'http://kabin.id:5984/');
+app.constant('_ArrangementDB', 'cippy');
+app.constant('_ChatDB', 'cippy_chats');
 app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
   
   $authProvider.facebook({

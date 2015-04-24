@@ -9,9 +9,9 @@ var request = require('request');
 
 // create the express app
 var app = express();
-
 // create the http server
 var server = require('http').createServer(app);
+var io = require('socket.io')(server);
 
 // configure the express app
 app.use(express.static(__dirname + '/public'));
@@ -30,3 +30,10 @@ require('./server/routes')(app);
 server.listen(config.appPort);
 
 console.log('Server started on port:', config.appPort)
+
+/* SOCKET IO - Replication */
+io.on('connection', function (socket) {
+  socket.on('replicate', function (data) {
+    socket.broadcast.emit('replicate', data);
+  })
+})
