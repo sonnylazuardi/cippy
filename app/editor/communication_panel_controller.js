@@ -1,5 +1,6 @@
-app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, ArrangementID){
+app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, $stateParams){
     
+  $scope.arrangement_id = $stateParams.arrangement_id;
   $scope.hideCommunicationPanel = function(){
     $rootScope.showCommunicationPanel = false;
   };
@@ -11,12 +12,12 @@ app.controller('CommunicationPanelController', function($rootScope, $scope, Arra
 
   $scope.message = '';
   $scope.chats = [];
-  Chat.bind(ArrangementID, $scope, 'chats');
+  Chat.bind($scope.arrangement_id, $scope, 'chats');
 
   $scope.send = function() {
     var newMessage = {
       _id: new Date().toISOString(),
-      arrangement_id: ArrangementID,
+      arrangement_id: $scope.arrangement_id,
       content: $scope.message,
       user: $scope.user,
       time: new Date(),

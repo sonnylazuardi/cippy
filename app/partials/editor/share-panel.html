@@ -1,0 +1,24 @@
+<div class="menu-header">
+  <span>Share Arrangement</span>
+  <span class="icon-cancel close" ng-click="hideSharePanel()"></span>
+</div>
+
+<div class="communication-panel-streams">
+  <ul class="chats">
+    <li ng-repeat="item in shared">
+      <img class="profile-picture large" ng-src="{{item.profile.picture}}">
+      <div class="name">{{item.profile.displayName}}</div>
+      <button class="topcoat-button" ng-click="remove(item)"> <i class="fa fa-remove"></i> </button>
+    </li>
+  </ul>
+
+  <h3>Invite</h3>
+  <ul class="chats">
+    <li ng-repeat="user in users">
+      <img class="profile-picture large" ng-src="{{user.picture}}">
+      <div class="name">{{user.displayName}}</div>
+      <button class="topcoat-button" ng-click="add(user)">Invite</button>
+    </li>
+  </ul>
+
+</div>

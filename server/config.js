@@ -7,6 +7,6 @@ module.exports = {
     accessKey: 'AKIAIC6C2LITVA33J2GQ',
     secret: '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'
   },
-  TOKEN_SECRET: 'A hard to guess token',
+  TOKEN_SECRET: 'cooltokenthatneverdie',
   FACEBOOK_SECRET: 'ab201ff90f617a8c7b40a553dfef42f7',
 };

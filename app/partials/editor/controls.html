@@ -19,9 +19,11 @@
     </button>
 
     <button class="topcoat-button file-browser" ng-click="showFiles()">File Browser</button>
+    <button class="topcoat-button profile" ng-click="showShare()">Share</button>
 
     <div ng-show="isFileBrowserVisible()" file-browser id="file-browser"></div>
     <div ng-show="isCommunicationPanelVisible()" communication-panel id="communication-panel"></div>
+    <div ng-show="isSharePanelVisible()" share-panel id="share-panel"></div>
 
     <button class="topcoat-button add-track" ng-click="showMenu = !showMenu">Add Track</button>
     <ul class="add-track-menu" ng-show="showMenu">

@@ -79,7 +79,7 @@ app.controller('DrumPieceEditController', ['$rootScope', '$scope', 'BufferedNode
     };
 
     var currentPatternLoad = function() {
-      console.log('hello2.5');
+      // console.log('hello2.5');
       var currentPattern = $scope.node[$scope.currentPatternName].data;
       Drumkits.instrumentsForKit($scope.piece.drumType).forEach(function(instrument){
         if(!_.isArray(currentPattern.beats[instrument]))

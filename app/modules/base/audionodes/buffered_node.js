@@ -81,7 +81,7 @@ app.factory('BufferedNode', ['BaseAudioNode', 'BufferLoader', '$q', 'Arrangement
         // stop node even if it is not playing (it might be scheduled)
         this.source.stop(0);
       }catch(e){
-        console.log('problem while stopping a buffered node', e);
+        // console.log('problem while stopping a buffered node', e);
       }
     }
 

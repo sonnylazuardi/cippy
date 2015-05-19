@@ -1,6 +1,7 @@
 app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser){
 
   $rootScope.showCommunicationPanel = false;
+  $rootScope.showSharePanel = false;
   $scope.playing = false;
   $scope.arrangement = Arrangement.doc;
   $scope.gain = 1;
@@ -53,8 +54,16 @@ app.controller('EditorControlsController', function($rootScope, $scope, Schedule
     $rootScope.showCommunicationPanel = true;
   };
 
+  $scope.showShare = function(){
+    $rootScope.showSharePanel = true;
+  };
+
   $scope.isCommunicationPanelVisible = function(){
     return $rootScope.showCommunicationPanel === true;
+  };
+
+  $scope.isSharePanelVisible = function(){
+    return $rootScope.showSharePanel === true;
   };
 
   // update the gain in the audio node when it changes

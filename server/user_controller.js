@@ -4,8 +4,15 @@ var qs = require('querystring');
 var moment = require('moment');
 var request = require('request');
 var PouchDB = require('pouchdb');
-var db = new PouchDB('http://kabin.id:5984/cippy');
-var UserDB = new PouchDB('http://kabin.id:5984/cippy_users');
+
+var CouchURL = 'http://localhost:5984/';
+var _ArrangementDB = 'cippy';
+var _ChatDB = 'cippy_chats';
+var _UserDB = 'cippy_users';
+
+
+var db = new PouchDB(CouchURL + _ArrangementDB);
+var UserDB = new PouchDB(CouchURL + _UserDB);
 
 function ensureAuthenticated(req, res, next) {
   if (!req.headers.authorization) {
@@ -31,18 +38,6 @@ function createToken(user) {
 
 module.exports = {
   test: function(req, res) {
-    // var map = function (doc) {
-    //   if (doc.yuhu === 'yihaa') {
-    //     emit(doc);
-    //   }
-    // }
-    // db.query(map).then(function (result) {
-    //   // handle result
-    //   res.json(result);
-    // }).catch(function (err) {
-    //   // console.log(err);
-    //   res.json(err);
-    // });
     var user = {};
     user.facebook = 'testing';
     user.picture = 'https://graph.facebook.com/testing/picture?type=large';
@@ -86,10 +81,12 @@ module.exports = {
       client_secret: config.FACEBOOK_SECRET,
       redirect_uri: req.body.redirectUri
     };
+    // console.log(params);
 
     // Step 1. Exchange authorization code for access token.
     request.get({ url: accessTokenUrl, qs: params, json: true }, function(err, response, accessToken) {
       if (response.statusCode !== 200) {
+        // console.log('gagal');
         return res.status(500).send({ message: accessToken.error.message });
       }
       // accessToken = qs.parse(accessToken);
@@ -100,12 +97,7 @@ module.exports = {
           return res.status(500).send({ message: profile.error.message });
         }
         if (req.headers.authorization) {
-          var query = function (doc) {
-            if (doc.facebook === profile.id) {
-              emit(doc);
-            }
-          }
-          UserDB.query(query).then(function(existingUser) {
+          UserDB.query(function(doc) {emit(doc.facebook)}, {startkey: profile.id, endkey:profile.id, include_docs: true}).then(function(existingUser) {
             if (existingUser.rows.length) {
               return res.status(409).send({ message: 'There is already a Facebook account that belongs to you' });
             }
@@ -124,15 +116,10 @@ module.exports = {
             });
           });
         } else {
-          var query = function (doc) {
-            if (doc.facebook === profile.id) {
-              emit(doc);
-            }
-          }
-          // Step 3b. Create a new user account or return an existing one.
-          UserDB.query(query).then(function(existingUser) {
+          // console.log(profile.id);
+          UserDB.query(function(doc) {emit(doc.facebook)}, {startkey: profile.id, endkey:profile.id, include_docs: true}).then(function(existingUser) {
             if (existingUser.rows.length) {
-              var token = createToken(existingUser);
+              var token = createToken(existingUser.rows[0].doc);
               return res.send({ token: token });
             }
             var user = {};

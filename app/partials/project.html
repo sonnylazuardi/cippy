@@ -1,0 +1,46 @@
+<div class="container">
+  
+  <div class="center boxed">
+    <div>
+      <img class="profile-picture-large" ng-src="{{user.picture}}"> 
+    </div>
+    <div>
+      {{user.displayName}}
+    </div>
+  </div>
+  <div class="center">
+    <div class="row">
+      <div class="six columns">
+        <h3>Your arrangements <button class="topcoat-button" ng-click="add()"><i class="fa fa-plus"></i> Add Arrangement</button></h3>
+
+        <ul class="list">
+          <li ng-repeat="project in projects">
+            <a href="#/editor/{{project._id}}"><i class="fa fa-music"></i>&nbsp; {{project.title}}</a> <button class="topcoat-button" ng-click="remove(project)"> <i class="fa fa-remove"></i> </button>
+          </li>
+        </ul>
+
+        <h3>Shared</h3>
+        <ul class="list">
+          <li ng-repeat="project in shared">
+            <a href="#/editor/{{project.arrangement}}"><i class="fa fa-music"></i>&nbsp; {{project.title}}</a> 
+          </li>
+        </ul>
+      </div>
+      <div class="six columns">
+        
+        <h3>Users</h3>
+
+        <ul class="list">
+          <li ng-repeat="_user in users">
+            <div class="profile">
+              <img class="profile-picture-thumb" ng-src="{{_user.picture}}"> {{_user.displayName}}
+            </div>
+          </li>
+        </ul>    
+      </div>
+    </div>
+    
+  
+    
+  </div>
+</div>

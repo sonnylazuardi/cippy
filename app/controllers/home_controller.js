@@ -1,7 +1,7 @@
 app.controller('HomeController', function($rootScope, $scope, $auth, $state){
 
   if ($auth.isAuthenticated()) {
-    $state.go('editor');
+    $state.go('project');
   }
 
   $scope.authenticate = function(provider) {
@@ -9,7 +9,7 @@ app.controller('HomeController', function($rootScope, $scope, $auth, $state){
     $auth.authenticate(provider)
       .then(function() {
         console.log('successfully logged');
-        $state.go('editor');
+        $state.go('project');
       })
       .catch(function(response) {
         console.log('failed to log in');

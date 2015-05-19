@@ -6,6 +6,12 @@ var app = angular.module('cippy', [
 ]); 
 
 app.constant('ArrangementID', 'dokumenmusik');
+app.constant('CouchURL', 'http://localhost:5984/');
+app.constant('_ArrangementDB', 'cippy_arrangements');
+app.constant('_ChatDB', 'cippy_chats');
+app.constant('_UserDB', 'cippy_users');
+app.constant('_SharedDB', 'cippy_shared');
+app.constant('_ProjectDB', 'cippy_projects');
 app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
   
   $authProvider.facebook({
@@ -24,21 +30,27 @@ app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
       template: null,
       controller: 'LogoutController'
     })
+    .state('project', {
+      url: '/project',
+      templateUrl: 'partials/project.html',
+      controller: 'ProjectController'
+    })
     .state('editor', {
-      url: "/editor",
+      url: "/editor/:arrangement_id",
       templateUrl: "partials/editor.html",
       controller: 'EditorController',
       resolve: {
         authenticated: function($q, $location, $auth) {
-          var deferred = $q.defer();
+          // var deferred = $q.defer();
 
-          if (!$auth.isAuthenticated()) {
-            $location.path('/home');
-          } else {
-            deferred.resolve();
-          }
+          // if (!$auth.isAuthenticated()) {
+          //   $location.path('/home');
+          // } else {
+          //   deferred.resolve();
+          // }
 
-          return deferred.promise;
+          // return deferred.promise;
+          return;
         }
       },
     });
@@ -142,7 +154,7 @@ app.factory('BufferedNode', ['BaseAudioNode', 'BufferLoader', '$q', 'Arrangement
         // stop node even if it is not playing (it might be scheduled)
         this.source.stop(0);
       }catch(e){
-        console.log('problem while stopping a buffered node', e);
+        // console.log('problem while stopping a buffered node', e);
       }
     }
 
@@ -721,11 +733,737 @@ app.factory('Track', ['BaseAudioNode', 'Arrangement',
   });
 
 }]);
-app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, ArrangementID){
-  var arrangement_id = ArrangementID;
+app.directive('beatsGrid', function($compile, EditorConfig, Drumkits, $rootScope, Arrangement) {
+
+  var assignInstruments = function(scope){
+    scope.instruments = Drumkits.instrumentsForKit(scope.piece.drumType);
+  };
+
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/pieces/beats_grid.html',
+    link: function(scope, element, attrs){
+      assignInstruments(scope);
+
+
+      scope.changeBeat = function(instrument, index, oldValue){
+        var instrument = scope.node[scope.currentPatternName].data.beats[instrument];
+        instrument[index] = (oldValue == 1) ? 0 : 1;
+      };
+
+      var unwatchPatternChange = scope.$watch('piece.drumType', function(){
+        assignInstruments(scope);
+      });
+
+      element.on('$destroy', function(){
+        unwatchPatternChange();
+      });
+    }
+  }
+});
+app.controller('BufferedPieceController', ['$rootScope', '$scope', 'BufferedNode', 'Arrangement',
+  function($rootScope, $scope, BufferedNode, Arrangement){
+
+  $scope.node = new BufferedNode($scope.piece);
+  Arrangement.registerPiece($scope.node.data.id, $scope.node);
+
+  $scope.node.master = $scope.trackNode.in;
+  $scope.node.context = $scope.trackNode.context;
+
+  $scope.edit = function(){
+    $scope.addAdditionalContent('<div buffered-piece-edit class="buffered-piece-edit-container"></div>', $scope);
+  };
+
+  $scope.remove = function(){
+    Arrangement.removePieceFromTrack($scope.piece, $scope.track);
+    $scope.node.stop();
+  };
+
+  var unwatchChange = $scope.$watch('piece.position', function(a,b){
+    if(a != b)
+      $scope.node.stop();
+  });
+}]);
+app.directive('bufferedPiece', ['$compile', 'EditorConfig', 'Arrangement', 'utils', 'IDGenerator',
+    function($compile, EditorConfig, Arrangement, utils, IDGenerator) {
+
+  return {
+    restrict: 'E',
+    templateUrl: 'partials/pieces/buffered_piece.html',
+    controller: 'BufferedPieceController',
+    link: function(scope, element, attrs){
+      scope.copyPiece = function(event){
+        if(!event.shiftKey) return;
+        var copiedPiece = utils.deepCopy(scope.piece);
+        copiedPiece.position += .2;
+        copiedPiece.id = IDGenerator.generate('piece');
+        scope.track.pieces.push(copiedPiece);
+      }
+    }
+  }
+}]);
+app.controller('BufferedPieceEditController', ['$rootScope', '$scope', 'utils', 'EditorConfig', 'Arrangement', 'BufferedRecordingNode',
+  function($rootScope, $scope, utils, EditorConfig, Arrangement, BufferedRecordingNode){
+    var setupRange = function(){
+      // add offsets to buffer if not set
+      if($scope.piece.offsetStart == undefined)
+        $scope.piece.offsetStart = 0;
+      if($scope.piece.offsetEnd == undefined)
+        $scope.piece.offsetEnd = 0;
+
+      $scope.leftHandle = ($scope.piece.offsetStart / $scope.node.buffer.duration) * 100;
+      $scope.rightHandle = 100 - (($scope.piece.offsetEnd / $scope.node.buffer.duration) * 100);
+      $scope.rangeWidth = $scope.node.buffer.duration * EditorConfig.pixelsPerSecond;
+    };
+    setupRange();
+
+    // if the offsets are changed, set the handles right
+    var unwatchOffsetStart = $scope.$watch('piece.offsetStart', setupRange);
+    var unwatchOffsetEnd = $scope.$watch('piece.offsetEnd', setupRange);
+
+    var handlesToOffsets = function(){
+      return {
+        offsetStart: ($scope.node.buffer.duration * $scope.leftHandle) / 100,
+        offsetEnd: $scope.node.buffer.duration - (($scope.node.buffer.duration * $scope.rightHandle) / 100)
+      }
+    };
+
+    var playNode;
+    $scope.playSelection = function(){
+      if(playNode)
+        playNode.stop()
+      var handles = handlesToOffsets();
+
+      playNode = new BufferedRecordingNode(utils.deepCopy($scope.piece), $scope.node.buffer);
+      playNode.data.offsetStart = handles.offsetStart;
+      playNode.data.offsetEnd = handles.offsetEnd;
+      playNode.play();
+    };
+
+    $scope.applySelection = function(){
+      var handles = handlesToOffsets();
+      $scope.piece.offsetStart = handles.offsetStart;
+      $scope.piece.offsetEnd = handles.offsetEnd;
+    };
+
+    $scope.tearDown = function(){
+      if(playNode)
+        playNode.stop()
+      unwatchOffsetStart();
+      unwatchOffsetEnd();
+    };
+}]);
+app.directive('bufferedPieceEdit', ['$compile', 'EditorConfig',
+    function($compile, EditorConfig) {
+
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/pieces/buffered_piece_edit.html',
+    controller: 'BufferedPieceEditController',
+    link: function(scope, element, attrs){
+      // set the curtain width
+      var applyCurtainWidth = function(){
+        angular.element(element[0].querySelector('.curtain')).css('width', scope.rangeWidth + 'px')
+      };
+      var unwatchRangeWidth = scope.$watch('rangeWidth', applyCurtainWidth);
+
+      var leftCurtain = angular.element(element[0].querySelector('.curtain .left'));
+      var applyLeftCurtain = function(){
+        var width = (scope.leftHandle / 100) * scope.rangeWidth;
+        leftCurtain.css('width', width + 'px');
+      }
+      var unwatchLeftHandle = scope.$watch('leftHandle', applyLeftCurtain);
+
+      var rightCurtain = angular.element(element[0].querySelector('.curtain .right'));
+      var applyRightCurtain = function(){
+        var width = (1 - (scope.rightHandle / 100)) * scope.rangeWidth;
+        rightCurtain.css('width', width + 'px');
+      };
+      var unwatchRightHandle = scope.$watch('rightHandle', applyRightCurtain);
+
+      element.on('$destroy', function(){
+        unwatchRangeWidth();
+        unwatchLeftHandle();
+        unwatchRightHandle();
+        scope.tearDown();
+      });
+    }
+  }
+}]);
+app.directive('draggablePiece', ['$rootScope', 'EditorConfig', function($rootScope, EditorConfig) {
+
+  var updatePosition = function(scope, element, position){
+    var modelPosition = scope.tone? scope.tone.position : scope.piece.position;
+    position = position != undefined ? position : modelPosition * EditorConfig.pixelsPerSecond;
+    element.css('left', position + 'px');
+  };
+
+  return {
+    restrict: 'A',
+    link: function(scope, element, attrs){
+
+      // save the current position when draggint starts
+      element.on('drag-start', function(){
+        scope.currentLeft = parseInt(element.css('left').replace('px', ''), 10);
+      });
+
+      // move to the updated position when dragging
+      element.on('drag', function(event, xDiff, yDiff){
+        scope.currentLeft += xDiff
+        updatePosition(scope, element, scope.currentLeft);
+      });
+
+      // save the updated position
+      element.on('drag-end', function(){
+        var newPos = parseInt(element.css('left').replace('px', ''), 10) / EditorConfig.pixelsPerSecond;
+        newPos = Math.max(0, newPos);
+        scope.$apply(function(){
+          if(scope.tone){
+            scope.tone.position = newPos;
+          }else if(scope.piece){
+            scope.piece.position = newPos;
+            $rootScope.$emit('unschedule', scope.piece);
+          }
+
+          // also: manually trigger the re-positioning
+          // the visual state could be at -7sec, the new position would be normalized to 0
+          // so no chang in model state
+          updatePosition(scope, element);
+        });
+      });
+
+      // either watch the current piece's position or another specified value
+      // if this value changes, update the visual position
+      scope.$watch(attrs.position || 'piece.position', function(){
+        updatePosition(scope, element);
+      }, true)
+
+      scope.$watch('config.pixelsPerSecond', function(){
+        updatePosition(scope, element);
+      });
+
+      updatePosition(scope, element);
+    }
+  }
+}])
+app.controller('DrumPieceController', function($rootScope, $scope, utils, Sampler, Arrangement, Drumkits){
+    $scope.node = new Sampler($scope.piece);
+    $scope.node.master = $scope.trackNode.in;
+    $scope.node.context = $scope.trackNode.context;
+
+    // load the current drum kit
+    Drumkits.loadKit($scope.piece.drumType);
+
+    Arrangement.registerPiece($scope.piece.id, $scope.node);
+
+    var unwatchDrumType = $scope.$watch('piece.drumType', function(newv, oldv){
+      if(newv != oldv)
+        Drumkits.loadKit($scope.piece.drumType);
+    });
+
+    $rootScope.$on('loadWatcher', function() {
+      $scope.node = new Sampler($scope.piece);
+      $scope.node.master = $scope.trackNode.in;
+      $scope.node.context = $scope.trackNode.context;
+
+      // load the current drum kit
+      Drumkits.loadKit($scope.piece.drumType);
+
+      Arrangement.registerPiece($scope.piece.id, $scope.node);
+    });
+
+    $scope.edit = function(){
+      $scope.addAdditionalContent('<div drum-piece-edit class="drum-piece-edit-container"></div>', $scope);
+    };
+
+    $scope.remove = function(){
+      unwatchDrumType();
+      Arrangement.removePieceFromTrack($scope.piece, $scope.track);
+      $scope.node.stop();
+    };
+});
+app.directive('drumPiece', ['$rootScope', 'EditorConfig', 'Drumkits',
+    function($rootScope, EditorConfig, Drumkits) {
+
+  var renderBeats = function(scope, element){
+    var canvasContext = element[0].getContext('2d');
+    var length = scope.node.length();
+    var width = length * EditorConfig.pixelsPerSecond;
+    var height = parseInt(element.prop('height'));
+    var instruments = Drumkits.instrumentsForKit(scope.piece.drumType);
+
+    element.prop('width', width);
+
+    canvasContext.clearRect(0, 0, width, height);
+    canvasContext.fillStyle = '#bada55';
+
+    // sum up all beats
+    var beatSum = 0;
+    scope.piece.patternOrder.forEach(function(patternName){
+      beatSum += scope.piece.patterns[patternName].slots;
+    });
+
+    // calculate the necessary width and height for single beats
+    var heightPerBeat = height / instruments.length;
+
+    // render each beat
+    var xOffset = 0;
+    scope.piece.patternOrder.forEach(function(patternName){
+      var pattern = scope.piece.patterns[patternName];
+      var patternObject = scope.node[patternName];
+      var widthPerBeat = patternObject.secondsBetweenBeats() * EditorConfig.pixelsPerSecond;
+
+      instruments.forEach(function(instrument, instrumentIndex){
+        // some beats may not exist, so return
+        if(!pattern.beats[instrument]) return;
+
+        // render beat if not zero
+        pattern.beats[instrument].forEach(function(beat, beatIndex){
+          if(beat)
+            canvasContext.fillRect(
+              xOffset + beatIndex * widthPerBeat,
+              instrumentIndex * heightPerBeat,
+              widthPerBeat,
+              heightPerBeat
+            )
+        });
+      });
+
+      // increase the xOffset by the current width
+      xOffset += pattern.slots * widthPerBeat;
+    });
+  };
+
+  return {
+    restrict: 'E',
+    templateUrl: 'partials/pieces/drum_piece.html',
+    controller: 'DrumPieceController',
+    link: function(scope, element, attrs){
+      // get the canvas element and render the beats
+      var canvasElement = angular.element(element[0].querySelector('canvas'));
+
+      renderBeats(scope, canvasElement);
+
+      scope.$on('loadWatcher', function() {
+        console.log(scope.piece);
+        renderBeats(scope, canvasElement);        
+      });
+
+      var unwatchPixels = scope.$watch('config.pixelsPerSecond', function(oldv, newv){
+        if(oldv != newv)
+          renderBeats(scope, canvasElement);
+      });
+
+      var unwatchChanges = scope.$watch('piece', function(oldv, newv){
+        if(oldv != newv)
+          renderBeats(scope, canvasElement);
+      }, true)
+
+      element.on('$destroy', function(){
+        unwatchPixels();
+        unwatchChanges();
+      });
+    }
+  }
+}]);
+app.controller('DrumPieceEditController', ['$rootScope', '$scope', 'BufferedNode', 'Arrangement', 'Drumkits', 'SharedAudioContext',
+  function($rootScope, $scope, BufferedNode, Arrangement, Drumkits, SharedAudioContext){
+    $scope.avalaibleDrumkits = Object.keys(Drumkits.kits);
+
+    $scope.currentPatternName = 'a';
+    $scope.isCurrentPattern = function(patternName){
+      return $scope.currentPatternName == patternName;
+    };
+
+    $scope.showPart = function(patternName){
+      if(machinePlaying)
+        $scope.startStopPlayback();
+      $scope.currentPatternName = patternName;
+    };
+
+    var machinePlaying = false;
+    $scope.startStopPlayback = function(){
+      if(machinePlaying){
+        $scope.node[$scope.currentPatternName].stopLoop();
+        $scope.loopBeat = -1;
+      }else{
+        $rootScope.$emit('force-stop');
+        $scope.node[$scope.currentPatternName].loop(function(beat){
+          $scope.$apply(function(){
+            $scope.loopBeat = beat;
+          });
+        });
+      }
+      machinePlaying = !machinePlaying;
+    };
+
+    $scope.playState = function(){
+      return (machinePlaying ? 'icon-pause' : 'icon-play');
+    };
+
+    $scope.removeFromPatternOrder = function(index){
+      $scope.piece.patternOrder.splice(index, 1);
+    };
+
+    $scope.movePatternRight = function(index){
+      if(index > 0){
+        var swap = $scope.piece.patternOrder[index-1];
+        $scope.piece.patternOrder[index-1] = $scope.piece.patternOrder[index];
+        $scope.piece.patternOrder[index] = swap;
+      }
+    };
+
+    $scope.movePatternLeft = function(index){
+      if(index < $scope.piece.patternOrder.length - 1){
+        var swap = $scope.piece.patternOrder[index+1];
+        $scope.piece.patternOrder[index+1] = $scope.piece.patternOrder[index];
+        $scope.piece.patternOrder[index] = swap
+      }
+    };
+
+    $scope.changeSlots = function(){
+
+      // change the slot length
+      var currentPattern = $scope.node[$scope.currentPatternName].data;
+      var slots = currentPattern.slots;
+
+      Drumkits.instrumentsForKit($scope.piece.drumType).forEach(function(instrument){
+        var currentBeats = currentPattern.beats[instrument];
+        // fill with an empty array
+        if(!currentBeats)
+          currentPattern.beats[instrument] = new Array(slots);
+        else{
+          // if the current length is bigger, shrink the array
+          if(currentBeats.length > slots){
+            currentPattern.beats[instrument] = currentBeats.slice(0, slots);
+          }else if(slots > currentBeats.length){
+            // the new slots number is higher, add more zeros
+            var slotDiff = slots - currentBeats.length;
+            for(var i = 0; i < slotDiff; i++)
+              currentPattern.beats[instrument].push(0);
+          }
+        }
+      });
+    };
+
+    var currentPatternLoad = function() {
+      // console.log('hello2.5');
+      var currentPattern = $scope.node[$scope.currentPatternName].data;
+      Drumkits.instrumentsForKit($scope.piece.drumType).forEach(function(instrument){
+        if(!_.isArray(currentPattern.beats[instrument]))
+          currentPattern.beats[instrument] = new Array(currentPattern.slots);
+        else {
+          for (var i = currentPattern.slots - 1; i >= 0; i--) {
+            if (currentPattern.beats[instrument][i] == undefined) {
+              currentPattern.beats[instrument][i] = 0;
+            }
+          };
+        }
+      });
+    }
+
+    // add empty arrays where needed
+    var unwatchCurrentPattern = $scope.$watch('currentPatternName', currentPatternLoad);
+
+    $scope.$on('loadWatcher', currentPatternLoad);
+
+    var unwatchPlay = $rootScope.$on('player:play', function(){
+      if(machinePlaying){
+        $scope.startStopPlayback();
+      }
+    });
+
+    $scope.tearDown = function(){
+      unwatchPlay();
+      // stop the playback
+      machinePlaying = true;
+      $scope.startStopPlayback();
+    };
+
+}]);
+app.directive('drumPieceEdit', ['$compile', 'EditorConfig',
+    function($compile, EditorConfig) {
+
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/pieces/drum_piece_edit.html',
+    controller: 'DrumPieceEditController',
+    link: function(scope, element, attrs){
+
+      // add the pattern name when one of the buttons is dragged
+      element[0].querySelector('.pattern-container').addEventListener('dragstart', function(event){
+        var patternName = event.target.attributes['data-pattern-name'].value;
+        event.dataTransfer.setData('patternName', patternName);
+      });
+
+      var partsOrderContainer = element[0].querySelector('.parts-order-container')
+
+      partsOrderContainer.addEventListener('dragover', function(event){
+        partsOrderContainer.classList.add('drop-here');
+        event.preventDefault()
+        event.stopPropagation();
+        return false;
+      });
+
+      partsOrderContainer.addEventListener('dragleave', function(event){
+        partsOrderContainer.classList.add('drop-here');
+      });
+
+      // react to dropped patterns
+      partsOrderContainer.addEventListener('drop', function(event){
+        partsOrderContainer.classList.remove('drop-here');
+        var patternName = event.dataTransfer.getData('patternName');
+
+        if(patternName){
+          scope.$apply(function(){
+            scope.piece.patternOrder.push(patternName);
+          });
+        }
+      });
+
+      element.on('$destroy', function(){
+        console.log('destory all watchers')
+        scope.tearDown();
+      });
+    }
+  }
+}]);
+app.directive('synthesizerPieceEdit', ['$compile', 'EditorConfig',
+    function($compile, EditorConfig) {
+
+
+  var keyToKey = {
+    65: 'Cl',
+    87: 'C#l',
+    83: 'Dl',
+    69: 'D#l',
+    68: 'El',
+    70: 'Fl',
+    84: 'F#l',
+    71: 'Gl',
+    90: 'G#l',
+    72: 'Al',
+    85: 'A#l',
+    74: 'Bl',
+    75: 'Cu',
+    79: 'C#u',
+    76: 'Du',
+    80: 'D#u',
+    186: 'Eu',
+    222: 'Fu',
+    221: 'F#u',
+    220: 'Gu'
+  };
+
+  var startOctave = '3';
+
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/pieces/synthesizer_piece_edit.html',
+    // controller: 'DrumPieceEditController',
+    link: function(scope, element, attrs){
+      var playNote = function(event){
+        if(keyToKey[event.keyCode]){
+          var note = keyToKey[event.keyCode].replace('l', startOctave).replace('u', (parseInt(startOctave, 10) + 1).toString());
+          if(!scope.node.playingNotes[note])
+            scope.node.playNote(note);
+        }
+      };
+
+      var stopNote = function(event){
+        if(keyToKey[event.keyCode]){
+          var note = keyToKey[event.keyCode].replace('l', startOctave).replace('u', (parseInt(startOctave, 10) + 1).toString());
+          if(scope.node.playingNotes[note])
+            scope.node.stopNote(note);
+        }
+      };
+
+      window.addEventListener('keydown', playNote);
+      window.addEventListener('keyup', stopNote);
+
+      element.on('$destroy', function(){
+        window.removeEventListener('keydown', playNote);
+        window.removeEventListener('keyup', stopNote);
+      });
+    }
+  }
+}]);
+app.controller('SynthesizerPieceController', ['$rootScope', '$scope', 'utils', 'Arrangement', 'Synthesizer', 'IDGenerator', 'EditorConfig',
+  function($rootScope, $scope, utils, Arrangement, Synthesizer, IDGenerator, EditorConfig){
+
+    $scope.node = new Synthesizer($scope.piece);
+    $scope.node.master = $scope.trackNode.in;
+    $scope.node.context = $scope.trackNode.context;
+    $scope.synthSettings = $scope.node.data.synthSettings;
+
+    $scope.node.setup();
+
+    Arrangement.registerPiece($scope.node.data.id, $scope.node);
+
+    $scope.edit = function(){
+      $scope.addAdditionalContent('<div synthesizer-piece-edit class="synthesizer-piece-edit-container"></div>', $scope);
+    };
+
+    $scope.remove = function(){
+      Arrangement.removePieceFromTrack($scope.piece, $scope.track);
+      disconnectNodes();
+    };
+
+    var unwatchChange = $scope.$watch('piece.position', function(a,b){
+      if(a != b)
+        $scope.node.stop();
+    });
+
+    var resetValues = function(){
+      $scope.node.setupSettings();
+      $scope.node.wireUpNodes();
+    };
+
+    var disconnectNodes = function(){
+      $scope.node.compressor.disconnect();
+      $scope.node.compressor = null;
+      $scope.node.filter.disconnect();
+      $scope.node.filter = null;
+      $scope.node.lfo.disconnect();
+      $scope.node.lfo.stop(0);
+      $scope.node.lfo = null;
+      $scope.node.osc1Gain.disconnect();
+      $scope.node.osc1Gain.null;
+      $scope.node.osc2Gain.disconnect();
+      $scope.node.osc2Gain.null;
+      $scope.node.osc3Gain.disconnect();
+      $scope.node.osc3Gain.null;
+      $scope.node.stop();
+    };
+
+    $scope.addTone = function(note, event){
+      event.stopPropagation();
+      event.preventDefault();
+
+      var toneId = IDGenerator.generate('tone');
+      var newTone = {
+        id: toneId,
+        duration: 1,
+        note: note,
+        position: (event.x - 256) / EditorConfig.pixelsPerSecond
+      };
+      $scope.piece.tones.push(newTone);
+    };
+
+    $scope.removeTone = function(tone, event){
+      event.stopPropagation();
+      event.preventDefault();
+
+      var index = $scope.piece.tones.indexOf(tone);
+      if(index > -1)
+        $scope.piece.tones.splice(index, 1);
+    };
+
+    var unwatchLfo = $scope.$watch('piece.synthSettings', function(oldV, newV){ if(oldV != newV) resetValues() }, true)
+
+}]);
+app.directive('synthesizerPiece', ['EditorConfig',
+    function(EditorConfig) {
+
+  var renderNotes = function(synthNode, element){
+    var canvasContext = element[0].getContext('2d');
+    var synthData = synthNode.data;
+    var width = synthNode.length() * EditorConfig.pixelsPerSecond;
+    var height = parseInt(element.prop('height'));
+    var heightPerNote = height / synthNode.notes.length;
+
+    element.prop('width', width);
+
+    canvasContext.clearRect(0, 0, width, height);
+    canvasContext.fillStyle = '#bada55';
+
+    var currentNote;
+    // render each note
+    synthNode.notes.forEach(function(note, index){
+      // gather all tones from this note
+      var tonesFromCurrentNote = _.where(synthData.tones, {note: note});
+      tonesFromCurrentNote.forEach(function(tone){
+        var noteHeight = index * heightPerNote;
+        var xPos = tone.position * EditorConfig.pixelsPerSecond;
+        canvasContext.fillRect(
+          tone.position * EditorConfig.pixelsPerSecond,
+          index * heightPerNote,
+          tone.duration * EditorConfig.pixelsPerSecond,
+          heightPerNote
+        )
+      });
+    });
+  };
+
+  return {
+    restrict: 'E',
+    templateUrl: 'partials/pieces/synthesizer_piece.html',
+    controller: 'SynthesizerPieceController',
+    link: function(scope, element, attrs){
+
+      var render = function(){
+        renderNotes(scope.node, element.find('canvas'));
+      };
+
+      render();
+
+      var unwatchPixels = scope.$watch('config.pixelsPerSecond', function(newv, oldv){
+        if(newv != oldv) render();
+      });
+
+      var unwatchTones = scope.$watch('piece.tones', function(newv, oldv){
+        if(newv != oldv) render();
+      }, true);
+
+      element.on('$destroy', function(){
+        unwatchPixels();
+        unwatchTones();
+      });
+
+    }
+  }
+}]);
+app.controller('SynthesizerPieceEditController', ['$rootScope', '$scope', 'utils', 'Arrangement', 'Synthesizer',
+  function($rootScope, $scope, utils, Arrangement, Synthesizer){
+
+
+}]);
+app.directive('synthTone', ['$compile', 'EditorConfig',
+    function($compile, EditorConfig) {
+
+  var setWidth = function(element, duration){
+    element.css('width', (EditorConfig.pixelsPerSecond * duration) + 'px');
+  };
+
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/pieces/synth_tone.html',
+    link: function(scope, element, attrs){
+
+      var widthHandle = angular.element(element[0].querySelector('.width-handle'));
+      var updateWidth = function(){
+        setWidth(element, scope.tone.duration);
+      };
+
+      widthHandle.on('drag', function(event, xDiff){
+        scope.tone.duration += xDiff / EditorConfig.pixelsPerSecond;
+        updateWidth();
+      });
+
+      scope.$watch('tone.duration', updateWidth);
+
+      element.on('$destroy', function(){
+        console.log('destory all watchers')
+      });
+    }
+  }
+}]);
+app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, CouchURL, _ArrangementDB, $interval){
+  var self = this;
   var timeInit = 0;
   var timeSend = 0;
   var timeReceive = 0;
+  self.stackCounter = 0;
   var arrangement = {
     doc: {},
 
@@ -857,111 +1595,147 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.compressor = arrangement.context.createDynamicsCompressor();
   arrangement.master.connect(arrangement.compressor);
   arrangement.compressor.connect(arrangement.context.destination);
+  arrangement.db = {}
 
-  var db = new PouchDB('cippy');
-  var localCouch = 'http://localhost:5984/cippy';
-  var remoteCouch = 'http://kabin.id:5984/cippy';
-  // var remoteCouch = 'http://couchdb-9fea86.smileupps.com/cippy';
-  
-  var init = function() {
-    // console.log('init');
-    var newDoc = {
-      _id: arrangement_id,
-      tracks: [],
-      buffers: [],
-    };
-    db.putIfNotExists(arrangement_id, newDoc);
+  arrangement.syncing = function(doc) {
+    // alert('sync');
+    // console.log(doc);
+    if (doc.id == arrangement.arrangement_id) {
 
-    db.get(arrangement_id).then(function (doc) {
-      // console.log(doc);
-      arrangement.doc = doc;
-      $rootScope.arrangement = arrangement.doc;
-      console.log('init');
-      console.log(window.performance.now() + window.performance.timing.navigationStart);
-      // timeInit = window.performance.now();
+      arrangement.doc._rev = doc.doc._rev;
+      if (self.stackCounter > 0) {
+        self.stackCounter--;
+      }
+
+      if (self.stackCounter == 0) {
+        arrangement.temp = false;
+        arrangement.doc = doc.doc;
+        $rootScope.$apply(function() {
+          $rootScope.arrangement = arrangement.doc;  
+        });
+      }
+
+      // console.log(self.stackCounter);
+         
+      // console.log('sync-receive');
+      // console.log(window.performance.now() + window.performance.timing.navigationStart);
 
       $rootScope.$emit('sync');
       $rootScope.$emit('synced');
-    }).catch(function (err) {
-      
-      console.log('===ERROR===');
-      console.log(err);
-    });
-  }
-
-  var syncing = function(doc) {
-    arrangement.doc = doc.doc;
-
-    $rootScope.$apply(function() {
-      $rootScope.arrangement = arrangement.doc;  
-    });
-       
-    console.log('receive');
-    console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // timeReceive = window.performance.now() - timeInit;
-    // console.log(timeReceive);
-
-    $rootScope.$emit('sync');
-    $rootScope.$emit('synced');
-    $rootScope.$emit('loadWatcher');
+      $rootScope.$emit('loadWatcher');
+    }
   };
+  
+  arrangement.init = function() {
+    // var newDoc = {
+    //   _id: arrangement.arrangement_id,
+    //   tracks: [],
+    //   buffers: [],
+    // };
+    // db.putIfNotExists(arrangement.arrangement_id, newDoc);
+    arrangement.db = new PouchDB(_ArrangementDB);
+    console.log('init1');
+    console.log(window.performance.now());
 
-  // Initialise a sync with the remote server
-  function sync() {
-    var opts = {live: true, retry: true};
-    db.sync(remoteCouch, opts);
-    // db.replicate.to(remoteCouch, opts, syncError);
-    // db.replicate.from(remoteCouch, opts, syncError);
-    // Uncomment for local couch
-    // db.replicate.to(localCouch, opts, syncError);
-    // db.replicate.from(localCouch, opts, syncError);
-  }
+    arrangement.db.get(arrangement.arrangement_id).then(function (doc) {
+      console.log('init2');
+      console.log(window.performance.now());
 
-  // There was some form or error syncing
-  function syncError() {
-    // console.log('syncError');
-  }
+      arrangement.doc = doc;
+      $rootScope.arrangement = arrangement.doc;
 
-  // arrangement.doc = JSON.parse(test);
-  // $rootScope.arrangement = arrangement.doc;
-  // $rootScope.$emit('sync');
-  db.changes({
-    since: 'now',
-    live: true,
-    include_docs: true,
-    conflicts: true,
-  }).on('change', syncing);
-
-  if (remoteCouch) {
-    init();
-    sync();
-  }
-
-  var watchComponent = function(newValue) {
-    var newDoc = newValue;
-    console.log('send');
-    console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // timeSend = window.performance.now() - timeInit;
-    // console.log(timeSend);
-
-    db.put(newDoc, {conflicts: true}).then(function(result) {
-      // console.log(result);
-    }).catch(function(err) {
-      console.log(err);
+      $rootScope.$emit('sync');
+      $rootScope.$emit('synced');
     });
+
+    arrangement.db.changes({
+      since: 'now',
+      live: true,
+      include_docs: true,
+      conflicts: true,
+    }).on('change', arrangement.syncing);
+
+    var opts = {live: true, retry: true};
+    arrangement.db.sync(CouchURL + _ArrangementDB, opts);
+  }
+
+  // SOCKET
+
+  var socket = io();
+
+  socket.on('replicate', function (data) {
+    // console.log('===STREAM COMING===');
+    // console.log('receive');
+    // console.log(window.performance.now() + window.performance.timing.navigationStart);
+    // console.log(data);
+    if (data._id == arrangement.arrangement_id) {
+      // data.temp = true;
+      // arrangement.doc = data;
+      // console.log(data.delta);
+      jsondiffpatch.patch(arrangement.doc, data.delta);
+      // console.log(arrangement.doc);
+      arrangement.doc.temp = true;
+      // console.log('nambah2');
+      self.stackCounter++;
+
+      $rootScope.$apply(function() {
+        $rootScope.arrangement = arrangement.doc;  
+      });
+
+      $rootScope.$emit('sync');
+      $rootScope.$emit('synced');
+      $rootScope.$emit('loadWatcher');
+    }
+  });
+
+  // SOCKET
+
+  var watchComponent = function(newValue, delta) {
+    var newDoc = newValue;
+    // console.log(self.stackCounter);
+    // if (self.stackCounter == 0) {
+    //   newDoc.temp = false;
+    // }
+
+    if (!newDoc.temp) {
+      // console.log('send');
+      // console.log(window.performance.now() + window.performance.timing.navigationStart);
+      
+      self.stackCounter++;
+      // console.log('nambah1');
+      
+      // newDoc.temp = true;
+
+      socket.emit('replicate', {_id: newDoc._id, delta: delta}); 
+      
+      delete newDoc['_rev'];
+      delete newDoc['_id'];
+      delete newDoc['temp'];
+
+      arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
+        return newDoc;
+      }).then(function(result) {
+        if (self.stackCounter > 0)
+          self.stackCounter--;
+      }).catch(function(error) {
+        console.log('failed to update');
+      });
+
+    }
   }
 
   $rootScope.$watch('arrangement', function(newValue, oldValue){
-    // console.log('CHANGE HAPPEN');
     if (newValue && oldValue) {
       if (newValue._rev == oldValue._rev) {
-          watchComponent(newValue);
+        var delta = jsondiffpatch.diff(oldValue, newValue);
+        watchComponent(newValue, delta);
       }
     }
   }, true);
 
   return arrangement;
 });
+
 
 
 app.directive('contenteditable', function(){
@@ -1535,731 +2309,6 @@ app.directive('waveForm', ['$rootScope', '$compile', 'EditorConfig',
     }
   }
 }]);
-app.directive('beatsGrid', function($compile, EditorConfig, Drumkits, $rootScope, Arrangement) {
-
-  var assignInstruments = function(scope){
-    scope.instruments = Drumkits.instrumentsForKit(scope.piece.drumType);
-  };
-
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/pieces/beats_grid.html',
-    link: function(scope, element, attrs){
-      assignInstruments(scope);
-
-
-      scope.changeBeat = function(instrument, index, oldValue){
-        var instrument = scope.node[scope.currentPatternName].data.beats[instrument];
-        instrument[index] = (oldValue == 1) ? 0 : 1;
-      };
-
-      var unwatchPatternChange = scope.$watch('piece.drumType', function(){
-        assignInstruments(scope);
-      });
-
-      element.on('$destroy', function(){
-        unwatchPatternChange();
-      });
-    }
-  }
-});
-app.controller('BufferedPieceController', ['$rootScope', '$scope', 'BufferedNode', 'Arrangement',
-  function($rootScope, $scope, BufferedNode, Arrangement){
-
-  $scope.node = new BufferedNode($scope.piece);
-  Arrangement.registerPiece($scope.node.data.id, $scope.node);
-
-  $scope.node.master = $scope.trackNode.in;
-  $scope.node.context = $scope.trackNode.context;
-
-  $scope.edit = function(){
-    $scope.addAdditionalContent('<div buffered-piece-edit class="buffered-piece-edit-container"></div>', $scope);
-  };
-
-  $scope.remove = function(){
-    Arrangement.removePieceFromTrack($scope.piece, $scope.track);
-    $scope.node.stop();
-  };
-
-  var unwatchChange = $scope.$watch('piece.position', function(a,b){
-    if(a != b)
-      $scope.node.stop();
-  });
-}]);
-app.directive('bufferedPiece', ['$compile', 'EditorConfig', 'Arrangement', 'utils', 'IDGenerator',
-    function($compile, EditorConfig, Arrangement, utils, IDGenerator) {
-
-  return {
-    restrict: 'E',
-    templateUrl: 'partials/pieces/buffered_piece.html',
-    controller: 'BufferedPieceController',
-    link: function(scope, element, attrs){
-      scope.copyPiece = function(event){
-        if(!event.shiftKey) return;
-        var copiedPiece = utils.deepCopy(scope.piece);
-        copiedPiece.position += .2;
-        copiedPiece.id = IDGenerator.generate('piece');
-        scope.track.pieces.push(copiedPiece);
-      }
-    }
-  }
-}]);
-app.controller('BufferedPieceEditController', ['$rootScope', '$scope', 'utils', 'EditorConfig', 'Arrangement', 'BufferedRecordingNode',
-  function($rootScope, $scope, utils, EditorConfig, Arrangement, BufferedRecordingNode){
-    var setupRange = function(){
-      // add offsets to buffer if not set
-      if($scope.piece.offsetStart == undefined)
-        $scope.piece.offsetStart = 0;
-      if($scope.piece.offsetEnd == undefined)
-        $scope.piece.offsetEnd = 0;
-
-      $scope.leftHandle = ($scope.piece.offsetStart / $scope.node.buffer.duration) * 100;
-      $scope.rightHandle = 100 - (($scope.piece.offsetEnd / $scope.node.buffer.duration) * 100);
-      $scope.rangeWidth = $scope.node.buffer.duration * EditorConfig.pixelsPerSecond;
-    };
-    setupRange();
-
-    // if the offsets are changed, set the handles right
-    var unwatchOffsetStart = $scope.$watch('piece.offsetStart', setupRange);
-    var unwatchOffsetEnd = $scope.$watch('piece.offsetEnd', setupRange);
-
-    var handlesToOffsets = function(){
-      return {
-        offsetStart: ($scope.node.buffer.duration * $scope.leftHandle) / 100,
-        offsetEnd: $scope.node.buffer.duration - (($scope.node.buffer.duration * $scope.rightHandle) / 100)
-      }
-    };
-
-    var playNode;
-    $scope.playSelection = function(){
-      if(playNode)
-        playNode.stop()
-      var handles = handlesToOffsets();
-
-      playNode = new BufferedRecordingNode(utils.deepCopy($scope.piece), $scope.node.buffer);
-      playNode.data.offsetStart = handles.offsetStart;
-      playNode.data.offsetEnd = handles.offsetEnd;
-      playNode.play();
-    };
-
-    $scope.applySelection = function(){
-      var handles = handlesToOffsets();
-      $scope.piece.offsetStart = handles.offsetStart;
-      $scope.piece.offsetEnd = handles.offsetEnd;
-    };
-
-    $scope.tearDown = function(){
-      if(playNode)
-        playNode.stop()
-      unwatchOffsetStart();
-      unwatchOffsetEnd();
-    };
-}]);
-app.directive('bufferedPieceEdit', ['$compile', 'EditorConfig',
-    function($compile, EditorConfig) {
-
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/pieces/buffered_piece_edit.html',
-    controller: 'BufferedPieceEditController',
-    link: function(scope, element, attrs){
-      // set the curtain width
-      var applyCurtainWidth = function(){
-        angular.element(element[0].querySelector('.curtain')).css('width', scope.rangeWidth + 'px')
-      };
-      var unwatchRangeWidth = scope.$watch('rangeWidth', applyCurtainWidth);
-
-      var leftCurtain = angular.element(element[0].querySelector('.curtain .left'));
-      var applyLeftCurtain = function(){
-        var width = (scope.leftHandle / 100) * scope.rangeWidth;
-        leftCurtain.css('width', width + 'px');
-      }
-      var unwatchLeftHandle = scope.$watch('leftHandle', applyLeftCurtain);
-
-      var rightCurtain = angular.element(element[0].querySelector('.curtain .right'));
-      var applyRightCurtain = function(){
-        var width = (1 - (scope.rightHandle / 100)) * scope.rangeWidth;
-        rightCurtain.css('width', width + 'px');
-      };
-      var unwatchRightHandle = scope.$watch('rightHandle', applyRightCurtain);
-
-      element.on('$destroy', function(){
-        unwatchRangeWidth();
-        unwatchLeftHandle();
-        unwatchRightHandle();
-        scope.tearDown();
-      });
-    }
-  }
-}]);
-app.directive('draggablePiece', ['$rootScope', 'EditorConfig', function($rootScope, EditorConfig) {
-
-  var updatePosition = function(scope, element, position){
-    var modelPosition = scope.tone? scope.tone.position : scope.piece.position;
-    position = position != undefined ? position : modelPosition * EditorConfig.pixelsPerSecond;
-    element.css('left', position + 'px');
-  };
-
-  return {
-    restrict: 'A',
-    link: function(scope, element, attrs){
-
-      // save the current position when draggint starts
-      element.on('drag-start', function(){
-        scope.currentLeft = parseInt(element.css('left').replace('px', ''), 10);
-      });
-
-      // move to the updated position when dragging
-      element.on('drag', function(event, xDiff, yDiff){
-        scope.currentLeft += xDiff
-        updatePosition(scope, element, scope.currentLeft);
-      });
-
-      // save the updated position
-      element.on('drag-end', function(){
-        var newPos = parseInt(element.css('left').replace('px', ''), 10) / EditorConfig.pixelsPerSecond;
-        newPos = Math.max(0, newPos);
-        scope.$apply(function(){
-          if(scope.tone){
-            scope.tone.position = newPos;
-          }else if(scope.piece){
-            scope.piece.position = newPos;
-            $rootScope.$emit('unschedule', scope.piece);
-          }
-
-          // also: manually trigger the re-positioning
-          // the visual state could be at -7sec, the new position would be normalized to 0
-          // so no chang in model state
-          updatePosition(scope, element);
-        });
-      });
-
-      // either watch the current piece's position or another specified value
-      // if this value changes, update the visual position
-      scope.$watch(attrs.position || 'piece.position', function(){
-        updatePosition(scope, element);
-      }, true)
-
-      scope.$watch('config.pixelsPerSecond', function(){
-        updatePosition(scope, element);
-      });
-
-      updatePosition(scope, element);
-    }
-  }
-}])
-app.controller('DrumPieceController', function($rootScope, $scope, utils, Sampler, Arrangement, Drumkits){
-    $scope.node = new Sampler($scope.piece);
-    $scope.node.master = $scope.trackNode.in;
-    $scope.node.context = $scope.trackNode.context;
-
-    // load the current drum kit
-    Drumkits.loadKit($scope.piece.drumType);
-
-    Arrangement.registerPiece($scope.piece.id, $scope.node);
-
-    var unwatchDrumType = $scope.$watch('piece.drumType', function(newv, oldv){
-      if(newv != oldv)
-        Drumkits.loadKit($scope.piece.drumType);
-    });
-
-    $rootScope.$on('loadWatcher', function() {
-      $scope.node = new Sampler($scope.piece);
-      $scope.node.master = $scope.trackNode.in;
-      $scope.node.context = $scope.trackNode.context;
-
-      // load the current drum kit
-      Drumkits.loadKit($scope.piece.drumType);
-
-      Arrangement.registerPiece($scope.piece.id, $scope.node);
-    });
-
-    $scope.edit = function(){
-      $scope.addAdditionalContent('<div drum-piece-edit class="drum-piece-edit-container"></div>', $scope);
-    };
-
-    $scope.remove = function(){
-      unwatchDrumType();
-      Arrangement.removePieceFromTrack($scope.piece, $scope.track);
-      $scope.node.stop();
-    };
-});
-app.directive('drumPiece', ['$rootScope', 'EditorConfig', 'Drumkits',
-    function($rootScope, EditorConfig, Drumkits) {
-
-  var renderBeats = function(scope, element){
-    var canvasContext = element[0].getContext('2d');
-    var length = scope.node.length();
-    var width = length * EditorConfig.pixelsPerSecond;
-    var height = parseInt(element.prop('height'));
-    var instruments = Drumkits.instrumentsForKit(scope.piece.drumType);
-
-    element.prop('width', width);
-
-    canvasContext.clearRect(0, 0, width, height);
-    canvasContext.fillStyle = '#bada55';
-
-    // sum up all beats
-    var beatSum = 0;
-    scope.piece.patternOrder.forEach(function(patternName){
-      beatSum += scope.piece.patterns[patternName].slots;
-    });
-
-    // calculate the necessary width and height for single beats
-    var heightPerBeat = height / instruments.length;
-
-    // render each beat
-    var xOffset = 0;
-    scope.piece.patternOrder.forEach(function(patternName){
-      var pattern = scope.piece.patterns[patternName];
-      var patternObject = scope.node[patternName];
-      var widthPerBeat = patternObject.secondsBetweenBeats() * EditorConfig.pixelsPerSecond;
-
-      instruments.forEach(function(instrument, instrumentIndex){
-        // some beats may not exist, so return
-        if(!pattern.beats[instrument]) return;
-
-        // render beat if not zero
-        pattern.beats[instrument].forEach(function(beat, beatIndex){
-          if(beat)
-            canvasContext.fillRect(
-              xOffset + beatIndex * widthPerBeat,
-              instrumentIndex * heightPerBeat,
-              widthPerBeat,
-              heightPerBeat
-            )
-        });
-      });
-
-      // increase the xOffset by the current width
-      xOffset += pattern.slots * widthPerBeat;
-    });
-  };
-
-  return {
-    restrict: 'E',
-    templateUrl: 'partials/pieces/drum_piece.html',
-    controller: 'DrumPieceController',
-    link: function(scope, element, attrs){
-      // get the canvas element and render the beats
-      var canvasElement = angular.element(element[0].querySelector('canvas'));
-
-      renderBeats(scope, canvasElement);
-
-      scope.$on('loadWatcher', function() {
-        console.log(scope.piece);
-        renderBeats(scope, canvasElement);        
-      });
-
-      var unwatchPixels = scope.$watch('config.pixelsPerSecond', function(oldv, newv){
-        if(oldv != newv)
-          renderBeats(scope, canvasElement);
-      });
-
-      var unwatchChanges = scope.$watch('piece', function(oldv, newv){
-        if(oldv != newv)
-          renderBeats(scope, canvasElement);
-      }, true)
-
-      element.on('$destroy', function(){
-        unwatchPixels();
-        unwatchChanges();
-      });
-    }
-  }
-}]);
-app.controller('DrumPieceEditController', ['$rootScope', '$scope', 'BufferedNode', 'Arrangement', 'Drumkits', 'SharedAudioContext',
-  function($rootScope, $scope, BufferedNode, Arrangement, Drumkits, SharedAudioContext){
-    $scope.avalaibleDrumkits = Object.keys(Drumkits.kits);
-
-    $scope.currentPatternName = 'a';
-    $scope.isCurrentPattern = function(patternName){
-      return $scope.currentPatternName == patternName;
-    };
-
-    $scope.showPart = function(patternName){
-      if(machinePlaying)
-        $scope.startStopPlayback();
-      $scope.currentPatternName = patternName;
-    };
-
-    var machinePlaying = false;
-    $scope.startStopPlayback = function(){
-      if(machinePlaying){
-        $scope.node[$scope.currentPatternName].stopLoop();
-        $scope.loopBeat = -1;
-      }else{
-        $rootScope.$emit('force-stop');
-        $scope.node[$scope.currentPatternName].loop(function(beat){
-          $scope.$apply(function(){
-            $scope.loopBeat = beat;
-          });
-        });
-      }
-      machinePlaying = !machinePlaying;
-    };
-
-    $scope.playState = function(){
-      return (machinePlaying ? 'icon-pause' : 'icon-play');
-    };
-
-    $scope.removeFromPatternOrder = function(index){
-      $scope.piece.patternOrder.splice(index, 1);
-    };
-
-    $scope.movePatternRight = function(index){
-      if(index > 0){
-        var swap = $scope.piece.patternOrder[index-1];
-        $scope.piece.patternOrder[index-1] = $scope.piece.patternOrder[index];
-        $scope.piece.patternOrder[index] = swap;
-      }
-    };
-
-    $scope.movePatternLeft = function(index){
-      if(index < $scope.piece.patternOrder.length - 1){
-        var swap = $scope.piece.patternOrder[index+1];
-        $scope.piece.patternOrder[index+1] = $scope.piece.patternOrder[index];
-        $scope.piece.patternOrder[index] = swap
-      }
-    };
-
-    $scope.changeSlots = function(){
-
-      // change the slot length
-      var currentPattern = $scope.node[$scope.currentPatternName].data;
-      var slots = currentPattern.slots;
-
-      Drumkits.instrumentsForKit($scope.piece.drumType).forEach(function(instrument){
-        var currentBeats = currentPattern.beats[instrument];
-        // fill with an empty array
-        if(!currentBeats)
-          currentPattern.beats[instrument] = new Array(slots);
-        else{
-          // if the current length is bigger, shrink the array
-          if(currentBeats.length > slots){
-            currentPattern.beats[instrument] = currentBeats.slice(0, slots);
-          }else if(slots > currentBeats.length){
-            // the new slots number is higher, add more zeros
-            var slotDiff = slots - currentBeats.length;
-            for(var i = 0; i < slotDiff; i++)
-              currentPattern.beats[instrument].push(0);
-          }
-        }
-      });
-    };
-
-    var currentPatternLoad = function() {
-      console.log('hello2.5');
-      var currentPattern = $scope.node[$scope.currentPatternName].data;
-      Drumkits.instrumentsForKit($scope.piece.drumType).forEach(function(instrument){
-        if(!_.isArray(currentPattern.beats[instrument]))
-          currentPattern.beats[instrument] = new Array(currentPattern.slots);
-        else {
-          for (var i = currentPattern.slots - 1; i >= 0; i--) {
-            if (currentPattern.beats[instrument][i] == undefined) {
-              currentPattern.beats[instrument][i] = 0;
-            }
-          };
-        }
-      });
-    }
-
-    // add empty arrays where needed
-    var unwatchCurrentPattern = $scope.$watch('currentPatternName', currentPatternLoad);
-
-    $scope.$on('loadWatcher', currentPatternLoad);
-
-    var unwatchPlay = $rootScope.$on('player:play', function(){
-      if(machinePlaying){
-        $scope.startStopPlayback();
-      }
-    });
-
-    $scope.tearDown = function(){
-      unwatchPlay();
-      // stop the playback
-      machinePlaying = true;
-      $scope.startStopPlayback();
-    };
-
-}]);
-app.directive('drumPieceEdit', ['$compile', 'EditorConfig',
-    function($compile, EditorConfig) {
-
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/pieces/drum_piece_edit.html',
-    controller: 'DrumPieceEditController',
-    link: function(scope, element, attrs){
-
-      // add the pattern name when one of the buttons is dragged
-      element[0].querySelector('.pattern-container').addEventListener('dragstart', function(event){
-        var patternName = event.target.attributes['data-pattern-name'].value;
-        event.dataTransfer.setData('patternName', patternName);
-      });
-
-      var partsOrderContainer = element[0].querySelector('.parts-order-container')
-
-      partsOrderContainer.addEventListener('dragover', function(event){
-        partsOrderContainer.classList.add('drop-here');
-        event.preventDefault()
-        event.stopPropagation();
-        return false;
-      });
-
-      partsOrderContainer.addEventListener('dragleave', function(event){
-        partsOrderContainer.classList.add('drop-here');
-      });
-
-      // react to dropped patterns
-      partsOrderContainer.addEventListener('drop', function(event){
-        partsOrderContainer.classList.remove('drop-here');
-        var patternName = event.dataTransfer.getData('patternName');
-
-        if(patternName){
-          scope.$apply(function(){
-            scope.piece.patternOrder.push(patternName);
-          });
-        }
-      });
-
-      element.on('$destroy', function(){
-        console.log('destory all watchers')
-        scope.tearDown();
-      });
-    }
-  }
-}]);
-app.directive('synthesizerPieceEdit', ['$compile', 'EditorConfig',
-    function($compile, EditorConfig) {
-
-
-  var keyToKey = {
-    65: 'Cl',
-    87: 'C#l',
-    83: 'Dl',
-    69: 'D#l',
-    68: 'El',
-    70: 'Fl',
-    84: 'F#l',
-    71: 'Gl',
-    90: 'G#l',
-    72: 'Al',
-    85: 'A#l',
-    74: 'Bl',
-    75: 'Cu',
-    79: 'C#u',
-    76: 'Du',
-    80: 'D#u',
-    186: 'Eu',
-    222: 'Fu',
-    221: 'F#u',
-    220: 'Gu'
-  };
-
-  var startOctave = '3';
-
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/pieces/synthesizer_piece_edit.html',
-    // controller: 'DrumPieceEditController',
-    link: function(scope, element, attrs){
-      var playNote = function(event){
-        if(keyToKey[event.keyCode]){
-          var note = keyToKey[event.keyCode].replace('l', startOctave).replace('u', (parseInt(startOctave, 10) + 1).toString());
-          if(!scope.node.playingNotes[note])
-            scope.node.playNote(note);
-        }
-      };
-
-      var stopNote = function(event){
-        if(keyToKey[event.keyCode]){
-          var note = keyToKey[event.keyCode].replace('l', startOctave).replace('u', (parseInt(startOctave, 10) + 1).toString());
-          if(scope.node.playingNotes[note])
-            scope.node.stopNote(note);
-        }
-      };
-
-      window.addEventListener('keydown', playNote);
-      window.addEventListener('keyup', stopNote);
-
-      element.on('$destroy', function(){
-        window.removeEventListener('keydown', playNote);
-        window.removeEventListener('keyup', stopNote);
-      });
-    }
-  }
-}]);
-app.controller('SynthesizerPieceController', ['$rootScope', '$scope', 'utils', 'Arrangement', 'Synthesizer', 'IDGenerator', 'EditorConfig',
-  function($rootScope, $scope, utils, Arrangement, Synthesizer, IDGenerator, EditorConfig){
-
-    $scope.node = new Synthesizer($scope.piece);
-    $scope.node.master = $scope.trackNode.in;
-    $scope.node.context = $scope.trackNode.context;
-    $scope.synthSettings = $scope.node.data.synthSettings;
-
-    $scope.node.setup();
-
-    Arrangement.registerPiece($scope.node.data.id, $scope.node);
-
-    $scope.edit = function(){
-      $scope.addAdditionalContent('<div synthesizer-piece-edit class="synthesizer-piece-edit-container"></div>', $scope);
-    };
-
-    $scope.remove = function(){
-      Arrangement.removePieceFromTrack($scope.piece, $scope.track);
-      disconnectNodes();
-    };
-
-    var unwatchChange = $scope.$watch('piece.position', function(a,b){
-      if(a != b)
-        $scope.node.stop();
-    });
-
-    var resetValues = function(){
-      $scope.node.setupSettings();
-      $scope.node.wireUpNodes();
-    };
-
-    var disconnectNodes = function(){
-      $scope.node.compressor.disconnect();
-      $scope.node.compressor = null;
-      $scope.node.filter.disconnect();
-      $scope.node.filter = null;
-      $scope.node.lfo.disconnect();
-      $scope.node.lfo.stop(0);
-      $scope.node.lfo = null;
-      $scope.node.osc1Gain.disconnect();
-      $scope.node.osc1Gain.null;
-      $scope.node.osc2Gain.disconnect();
-      $scope.node.osc2Gain.null;
-      $scope.node.osc3Gain.disconnect();
-      $scope.node.osc3Gain.null;
-      $scope.node.stop();
-    };
-
-    $scope.addTone = function(note, event){
-      event.stopPropagation();
-      event.preventDefault();
-
-      var toneId = IDGenerator.generate('tone');
-      var newTone = {
-        id: toneId,
-        duration: 1,
-        note: note,
-        position: (event.x - 256) / EditorConfig.pixelsPerSecond
-      };
-      $scope.piece.tones.push(newTone);
-    };
-
-    $scope.removeTone = function(tone, event){
-      event.stopPropagation();
-      event.preventDefault();
-
-      var index = $scope.piece.tones.indexOf(tone);
-      if(index > -1)
-        $scope.piece.tones.splice(index, 1);
-    };
-
-    var unwatchLfo = $scope.$watch('piece.synthSettings', function(oldV, newV){ if(oldV != newV) resetValues() }, true)
-
-}]);
-app.directive('synthesizerPiece', ['EditorConfig',
-    function(EditorConfig) {
-
-  var renderNotes = function(synthNode, element){
-    var canvasContext = element[0].getContext('2d');
-    var synthData = synthNode.data;
-    var width = synthNode.length() * EditorConfig.pixelsPerSecond;
-    var height = parseInt(element.prop('height'));
-    var heightPerNote = height / synthNode.notes.length;
-
-    element.prop('width', width);
-
-    canvasContext.clearRect(0, 0, width, height);
-    canvasContext.fillStyle = '#bada55';
-
-    var currentNote;
-    // render each note
-    synthNode.notes.forEach(function(note, index){
-      // gather all tones from this note
-      var tonesFromCurrentNote = _.where(synthData.tones, {note: note});
-      tonesFromCurrentNote.forEach(function(tone){
-        var noteHeight = index * heightPerNote;
-        var xPos = tone.position * EditorConfig.pixelsPerSecond;
-        canvasContext.fillRect(
-          tone.position * EditorConfig.pixelsPerSecond,
-          index * heightPerNote,
-          tone.duration * EditorConfig.pixelsPerSecond,
-          heightPerNote
-        )
-      });
-    });
-  };
-
-  return {
-    restrict: 'E',
-    templateUrl: 'partials/pieces/synthesizer_piece.html',
-    controller: 'SynthesizerPieceController',
-    link: function(scope, element, attrs){
-
-      var render = function(){
-        renderNotes(scope.node, element.find('canvas'));
-      };
-
-      render();
-
-      var unwatchPixels = scope.$watch('config.pixelsPerSecond', function(newv, oldv){
-        if(newv != oldv) render();
-      });
-
-      var unwatchTones = scope.$watch('piece.tones', function(newv, oldv){
-        if(newv != oldv) render();
-      }, true);
-
-      element.on('$destroy', function(){
-        unwatchPixels();
-        unwatchTones();
-      });
-
-    }
-  }
-}]);
-app.controller('SynthesizerPieceEditController', ['$rootScope', '$scope', 'utils', 'Arrangement', 'Synthesizer',
-  function($rootScope, $scope, utils, Arrangement, Synthesizer){
-
-
-}]);
-app.directive('synthTone', ['$compile', 'EditorConfig',
-    function($compile, EditorConfig) {
-
-  var setWidth = function(element, duration){
-    element.css('width', (EditorConfig.pixelsPerSecond * duration) + 'px');
-  };
-
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/pieces/synth_tone.html',
-    link: function(scope, element, attrs){
-
-      var widthHandle = angular.element(element[0].querySelector('.width-handle'));
-      var updateWidth = function(){
-        setWidth(element, scope.tone.duration);
-      };
-
-      widthHandle.on('drag', function(event, xDiff){
-        scope.tone.duration += xDiff / EditorConfig.pixelsPerSecond;
-        updateWidth();
-      });
-
-      scope.$watch('tone.duration', updateWidth);
-
-      element.on('$destroy', function(){
-        console.log('destory all watchers')
-      });
-    }
-  }
-}]);
 app.controller('RecordingController', function($scope, SharedAudioContext, Arrangement, BufferedRecordingNode){
     var audioStream, audioInput, analyser, gainControl;
 
@@ -2472,7 +2521,7 @@ app.directive('duoRangeHandle', ['$compile', 'EditorConfig',
 app.controller('HomeController', function($rootScope, $scope, $auth, $state){
 
   if ($auth.isAuthenticated()) {
-    $state.go('editor');
+    $state.go('project');
   }
 
   $scope.authenticate = function(provider) {
@@ -2480,7 +2529,7 @@ app.controller('HomeController', function($rootScope, $scope, $auth, $state){
     $auth.authenticate(provider)
       .then(function() {
         console.log('successfully logged');
-        $state.go('editor');
+        $state.go('project');
       })
       .catch(function(response) {
         console.log('failed to log in');
@@ -2490,15 +2539,106 @@ app.controller('HomeController', function($rootScope, $scope, $auth, $state){
 });
 app.controller('LogoutController', function($rootScope, $scope, $auth, $state){
 
-  if (!$auth.isAuthenticated()) {
-    return;
-  }
+  // alert('logout');
+  
+  // if (!$auth.isAuthenticated()) {
+  //   return;
+  // }
+
   $auth.logout()
     .then(function() {
       $state.go('home');
     });
 
 });
+app.controller('ProjectController', function($rootScope, $scope, $auth, $state, _UserDB, _SharedDB, _ArrangementDB, CouchURL, Account){
+
+  if (!$auth.isAuthenticated()) {
+    $state.go('home');
+  }
+
+  var ArrangementDB = new PouchDB(CouchURL + _ArrangementDB);
+  var UserDB = new PouchDB(CouchURL + _UserDB);
+  var SharedDB = new PouchDB(CouchURL + _SharedDB);
+  $scope.projects = [];
+  $scope.users = [];
+
+  $scope.add = function() {
+    var arrangement = prompt("Please enter your new arrangement name", "New Arrangement");
+
+    if (arrangement != null) {
+      var slug = arrangement.replace(/(^\-+|[^a-zA-Z0-9\/_| -]+|\-+$)/g, '').toLowerCase().replace(/[\/_| -]+/g, '-');
+      ArrangementDB.put({
+        _id: slug,
+        title: arrangement,
+        author: $scope.user.facebook,
+        tracks: [],
+        buffers: [],
+      }).then(function (data) {
+        $scope.refresh();
+      });
+    }
+  }
+
+  $scope.remove = function(arrangement) {
+    var r = confirm("Are you sure want to remove "+arrangement.title+"?");
+    if (r == true) {
+      ArrangementDB.remove(arrangement).then(function(data) {
+        $scope.refresh();
+      });
+      SharedDB.query(function(doc) {
+        emit(doc.arrangement)
+      }, {startkey: arrangement._id, endkey: arrangement._id, include_docs: true}).then(function (data) {
+        _.map(data.rows, function(item) {
+          SharedDB.remove(item.doc).then(function(data) {
+            $scope.refresh();
+          });
+        });
+      });
+    }
+  }
+
+  $scope.refresh = function() {
+    var data = $scope.user;
+    // console.log(data);
+
+    UserDB.allDocs({include_docs: true}).then(function (data) {
+      $scope.$apply(function() {
+        $scope.users = _.map(data.rows, function(item) {
+          return item.doc;
+        });
+      });
+    });
+
+    SharedDB.query(function(doc) {
+      emit(doc.user)
+    }, {startkey: data.facebook, endkey: data.facebook, include_docs: true}).then(function (data) {
+      $scope.$apply(function() {
+        $scope.shared = _.map(data.rows, function(item) {
+          return item.doc;
+        });
+      });
+    });
+
+    ArrangementDB.query(function(doc) {
+      emit(doc.author)
+    }, {startkey: data.facebook, endkey: data.facebook, include_docs: true}).then(function (data) {
+      $scope.$apply(function() {
+        $scope.projects = _.map(data.rows, function(item) {
+          return item.doc;
+        });
+      });
+    });
+  }
+
+  Account.getProfile()
+    .success(function(data) {
+      $scope.user = data;
+      $scope.refresh();
+    });  
+});
+
+
 app.directive('time', function() {
     return {
         restrict: 'A',
@@ -2515,8 +2655,9 @@ app.directive('time', function() {
         }
     }
 });
-app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, ArrangementID){
+app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, $stateParams){
     
+  $scope.arrangement_id = $stateParams.arrangement_id;
   $scope.hideCommunicationPanel = function(){
     $rootScope.showCommunicationPanel = false;
   };
@@ -2528,12 +2669,12 @@ app.controller('CommunicationPanelController', function($rootScope, $scope, Arra
 
   $scope.message = '';
   $scope.chats = [];
-  Chat.bind(ArrangementID, $scope, 'chats');
+  Chat.bind($scope.arrangement_id, $scope, 'chats');
 
   $scope.send = function() {
     var newMessage = {
       _id: new Date().toISOString(),
-      arrangement_id: ArrangementID,
+      arrangement_id: $scope.arrangement_id,
       content: $scope.message,
       user: $scope.user,
       time: new Date(),
@@ -2560,7 +2701,10 @@ app.service('EditorConfig', function(){
     track_settings_offset: 190
   }
 });
-app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode, $auth, Account){
+app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode, $auth, Account, $stateParams){
+    $scope.arrangement_id = $stateParams.arrangement_id;
+    Arrangement.arrangement_id = $stateParams.arrangement_id;
+    Arrangement.init();
 
     $scope.arrangement = Arrangement.doc;
     $scope.config = EditorConfig;
@@ -2581,9 +2725,6 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
     $rootScope.$on('sync', function(){
       $scope.$apply(function(){
         $scope.arrangement = Arrangement.doc;
-        // $rootScope.arrangement = Arrangement.doc;
-        // console.log($rootScope.arrangement);
-        // console.log($scope.arrangement);
       });
     });
 
@@ -2593,6 +2734,7 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
 app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser){
 
   $rootScope.showCommunicationPanel = false;
+  $rootScope.showSharePanel = false;
   $scope.playing = false;
   $scope.arrangement = Arrangement.doc;
   $scope.gain = 1;
@@ -2645,8 +2787,16 @@ app.controller('EditorControlsController', function($rootScope, $scope, Schedule
     $rootScope.showCommunicationPanel = true;
   };
 
+  $scope.showShare = function(){
+    $rootScope.showSharePanel = true;
+  };
+
   $scope.isCommunicationPanelVisible = function(){
     return $rootScope.showCommunicationPanel === true;
+  };
+
+  $scope.isSharePanelVisible = function(){
+    return $rootScope.showSharePanel === true;
   };
 
   // update the gain in the audio node when it changes
@@ -3191,6 +3341,75 @@ app.service('Scheduler', ['$rootScope', 'Ticker', 'Arrangement', function($rootS
   
   return scheduler;
 }]);
+app.controller('SharePanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, $stateParams, _SharedDB, _UserDB, _ArrangementDB, CouchURL){
+    
+  $scope.arrangement_id = $stateParams.arrangement_id;
+  var SharedDB = new PouchDB(CouchURL + _SharedDB);
+  var UserDB = new PouchDB(CouchURL + _UserDB);
+  $scope.shared = [];
+  $scope.users = [];
+
+  $scope.hideSharePanel = function(){
+    $rootScope.showSharePanel = false;
+  };
+
+  $scope.add = function(user) {
+    SharedDB.post({
+      title: Arrangement.doc.title,
+      arrangement: Arrangement.doc._id,
+      user: user.facebook,
+      profile: user,
+    }).then(function (data) {
+      $scope.refresh();
+    });
+  }
+
+  $scope.remove = function(shared) {
+    var r = confirm("Are you sure want to remove ?");
+    if (r == true) {
+      SharedDB.remove(shared).then(function(data) {
+        $scope.refresh();
+      });
+    }
+  }
+
+  $scope.refresh = function() {
+    SharedDB.query(function(doc) {
+      emit(doc.arrangement)
+    }, {startkey: $scope.arrangement_id, endkey: $scope.arrangement_id, include_docs: true}).then(function (data) {
+      $scope.$apply(function() {
+        $scope.shared = _.map(data.rows, function(item) {
+          return item.doc;
+        });
+      });
+    });
+
+    UserDB.allDocs({include_docs: true}).then(function (data) {
+      $scope.$apply(function() {
+        $scope.users = _.map(data.rows, function(item) {
+          return item.doc;
+        });
+      });
+    });
+  }
+
+  Account.getProfile()
+    .success(function(data) {
+      $scope.user = data;
+    });
+
+  $scope.refresh();
+});
+app.directive('sharePanel', function() {
+  return {
+    restrict: 'A',
+    controller: 'SharePanelController',
+    templateUrl: 'partials/editor/share-panel.html',
+    link: function(scope, element, attr){
+      
+    }
+  }
+});
 app.directive('timeLine', ['$rootScope', 'Arrangement', 'EditorConfig', 'Scheduler',
     function($rootScope, Arrangement, EditorConfig, Scheduler) {
 
@@ -3522,11 +3741,11 @@ app.factory('utils', [function(){
 app.factory('Account', function($http) {
   return {
     getProfile: function() {
-      console.log('getProfile');
+      // console.log('getProfile');
       return $http.get('/api/me');
     },
     updateProfile: function(profileData) {
-      console.log('updateProfile');
+      // console.log('updateProfile');
       return $http.put('/api/me', profileData);
     }
   };
@@ -3582,6 +3801,7 @@ app.service('AudioCache', function($http, $q) {
   };
 
   self.saveFile = function(filename, content) {
+    if (self.filesystem === null) return;
     self.filesystem.root.getFile(filename, {create: true}, function(fileEntry) {
 
       fileEntry.createWriter(function(fileWriter) {
@@ -3613,6 +3833,7 @@ app.service('AudioCache', function($http, $q) {
   };
 
   self.loadFile = function(filename, success) {
+    if (self.filesystem === null) return;
     self.filesystem.root.getFile(filename, {}, function(fileEntry) {
 
       fileEntry.file(function(file) {
@@ -3642,13 +3863,18 @@ app.service('AudioCache', function($http, $q) {
     });
   };
 
-  self.initFileSystem();
+  // Start the app by requesting a FileSystem (if the browser supports the API)
+  if (window.requestFileSystem) {
+    self.initFileSystem();
+  } else {
+    alert('Sorry! Your browser doesn\'t support the FileSystem API :(');
+  }
 
   return self;
 });
-app.factory('Chat', function() {
-  var remote = 'http://kabin.id:5984/cippy_chats';
-  var ChatDB = new PouchDB('cippy_chats');
+app.factory('Chat', function(CouchURL, _ChatDB) {
+  var remote = CouchURL + _ChatDB;
+  var ChatDB = new PouchDB(_ChatDB);
   var opts = {live: true, retry: true};
   var self = this;
   self.scope = {};
@@ -3658,17 +3884,13 @@ app.factory('Chat', function() {
   self.syncing = function(doc) {
     if (self.arrangement != '') {
       ChatDB.query(function (doc, emit) {
-        if (doc.arrangement_id === self.arrangement) {
-          emit(doc.time, doc);
-        }
-      }, {include_docs: true}).then(function (docs) {
+        emit(doc.arrangement_id);
+      }, {startkey: self.arrangement, endkey: self.arrangement, include_docs: true}).then(function (docs) {
         self.scope.$apply(function() {
           self.scope[self.name] = _.map(docs.rows, function(item) {
             return item.doc;
           });
         });
-      }).catch(function (err) {
-        console.log(err);
       });
     }
   }
@@ -3685,8 +3907,6 @@ app.factory('Chat', function() {
       self.scope[self.name].push(item);
       ChatDB.put(item).then(function (result) {
 
-      }).catch(function(err) {
-        console.log(err);
       });
     },
     bind: function(arrangement, $scope, name) {

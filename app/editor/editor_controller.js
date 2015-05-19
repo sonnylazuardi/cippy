@@ -1,4 +1,7 @@
-app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode, $auth, Account){
+app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode, $auth, Account, $stateParams){
+    $scope.arrangement_id = $stateParams.arrangement_id;
+    Arrangement.arrangement_id = $stateParams.arrangement_id;
+    Arrangement.init();
 
     $scope.arrangement = Arrangement.doc;
     $scope.config = EditorConfig;
@@ -19,9 +22,6 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
     $rootScope.$on('sync', function(){
       $scope.$apply(function(){
         $scope.arrangement = Arrangement.doc;
-        // $rootScope.arrangement = Arrangement.doc;
-        // console.log($rootScope.arrangement);
-        // console.log($scope.arrangement);
       });
     });
 

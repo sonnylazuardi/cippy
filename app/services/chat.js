@@ -1,6 +1,6 @@
-app.factory('Chat', function() {
-  var remote = 'http://kabin.id:5984/cippy_chats';
-  var ChatDB = new PouchDB('cippy_chats');
+app.factory('Chat', function(CouchURL, _ChatDB) {
+  var remote = CouchURL + _ChatDB;
+  var ChatDB = new PouchDB(_ChatDB);
   var opts = {live: true, retry: true};
   var self = this;
   self.scope = {};
@@ -10,17 +10,13 @@ app.factory('Chat', function() {
   self.syncing = function(doc) {
     if (self.arrangement != '') {
       ChatDB.query(function (doc, emit) {
-        if (doc.arrangement_id === self.arrangement) {
-          emit(doc.time, doc);
-        }
-      }, {include_docs: true}).then(function (docs) {
+        emit(doc.arrangement_id);
+      }, {startkey: self.arrangement, endkey: self.arrangement, include_docs: true}).then(function (docs) {
         self.scope.$apply(function() {
           self.scope[self.name] = _.map(docs.rows, function(item) {
             return item.doc;
           });
         });
-      }).catch(function (err) {
-        console.log(err);
       });
     }
   }
@@ -37,8 +33,6 @@ app.factory('Chat', function() {
       self.scope[self.name].push(item);
       ChatDB.put(item).then(function (result) {
 
-      }).catch(function(err) {
-        console.log(err);
       });
     },
     bind: function(arrangement, $scope, name) {

@@ -1,8 +1,9 @@
-app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, ArrangementID){
-  var arrangement_id = ArrangementID;
+app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, CouchURL, _ArrangementDB, $interval){
+  var self = this;
   var timeInit = 0;
   var timeSend = 0;
   var timeReceive = 0;
+  self.stackCounter = 0;
   var arrangement = {
     doc: {},
 
@@ -134,109 +135,145 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.compressor = arrangement.context.createDynamicsCompressor();
   arrangement.master.connect(arrangement.compressor);
   arrangement.compressor.connect(arrangement.context.destination);
+  arrangement.db = {}
 
-  var db = new PouchDB('cippy');
-  var localCouch = 'http://localhost:5984/cippy';
-  var remoteCouch = 'http://kabin.id:5984/cippy';
-  // var remoteCouch = 'http://couchdb-9fea86.smileupps.com/cippy';
-  
-  var init = function() {
-    // console.log('init');
-    var newDoc = {
-      _id: arrangement_id,
-      tracks: [],
-      buffers: [],
-    };
-    db.putIfNotExists(arrangement_id, newDoc);
+  arrangement.syncing = function(doc) {
+    // alert('sync');
+    // console.log(doc);
+    if (doc.id == arrangement.arrangement_id) {
 
-    db.get(arrangement_id).then(function (doc) {
-      // console.log(doc);
-      arrangement.doc = doc;
-      $rootScope.arrangement = arrangement.doc;
-      console.log('init');
-      console.log(window.performance.now() + window.performance.timing.navigationStart);
-      // timeInit = window.performance.now();
+      arrangement.doc._rev = doc.doc._rev;
+      if (self.stackCounter > 0) {
+        self.stackCounter--;
+      }
+
+      if (self.stackCounter == 0) {
+        arrangement.temp = false;
+        arrangement.doc = doc.doc;
+        $rootScope.$apply(function() {
+          $rootScope.arrangement = arrangement.doc;  
+        });
+      }
+
+      // console.log(self.stackCounter);
+         
+      // console.log('sync-receive');
+      // console.log(window.performance.now() + window.performance.timing.navigationStart);
 
       $rootScope.$emit('sync');
       $rootScope.$emit('synced');
-    }).catch(function (err) {
-      
-      console.log('===ERROR===');
-      console.log(err);
-    });
-  }
-
-  var syncing = function(doc) {
-    arrangement.doc = doc.doc;
-
-    $rootScope.$apply(function() {
-      $rootScope.arrangement = arrangement.doc;  
-    });
-       
-    console.log('receive');
-    console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // timeReceive = window.performance.now() - timeInit;
-    // console.log(timeReceive);
-
-    $rootScope.$emit('sync');
-    $rootScope.$emit('synced');
-    $rootScope.$emit('loadWatcher');
+      $rootScope.$emit('loadWatcher');
+    }
   };
+  
+  arrangement.init = function() {
+    // var newDoc = {
+    //   _id: arrangement.arrangement_id,
+    //   tracks: [],
+    //   buffers: [],
+    // };
+    // db.putIfNotExists(arrangement.arrangement_id, newDoc);
+    arrangement.db = new PouchDB(_ArrangementDB);
+    console.log('init1');
+    console.log(window.performance.now());
 
-  // Initialise a sync with the remote server
-  function sync() {
-    var opts = {live: true, retry: true};
-    db.sync(remoteCouch, opts);
-    // db.replicate.to(remoteCouch, opts, syncError);
-    // db.replicate.from(remoteCouch, opts, syncError);
-    // Uncomment for local couch
-    // db.replicate.to(localCouch, opts, syncError);
-    // db.replicate.from(localCouch, opts, syncError);
-  }
+    arrangement.db.get(arrangement.arrangement_id).then(function (doc) {
+      console.log('init2');
+      console.log(window.performance.now());
 
-  // There was some form or error syncing
-  function syncError() {
-    // console.log('syncError');
-  }
+      arrangement.doc = doc;
+      $rootScope.arrangement = arrangement.doc;
 
-  // arrangement.doc = JSON.parse(test);
-  // $rootScope.arrangement = arrangement.doc;
-  // $rootScope.$emit('sync');
-  db.changes({
-    since: 'now',
-    live: true,
-    include_docs: true,
-    conflicts: true,
-  }).on('change', syncing);
-
-  if (remoteCouch) {
-    init();
-    sync();
-  }
-
-  var watchComponent = function(newValue) {
-    var newDoc = newValue;
-    console.log('send');
-    console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // timeSend = window.performance.now() - timeInit;
-    // console.log(timeSend);
-
-    db.put(newDoc, {conflicts: true}).then(function(result) {
-      // console.log(result);
-    }).catch(function(err) {
-      console.log(err);
+      $rootScope.$emit('sync');
+      $rootScope.$emit('synced');
     });
+
+    arrangement.db.changes({
+      since: 'now',
+      live: true,
+      include_docs: true,
+      conflicts: true,
+    }).on('change', arrangement.syncing);
+
+    var opts = {live: true, retry: true};
+    arrangement.db.sync(CouchURL + _ArrangementDB, opts);
+  }
+
+  // SOCKET
+
+  var socket = io();
+
+  socket.on('replicate', function (data) {
+    // console.log('===STREAM COMING===');
+    // console.log('receive');
+    // console.log(window.performance.now() + window.performance.timing.navigationStart);
+    // console.log(data);
+    if (data._id == arrangement.arrangement_id) {
+      // data.temp = true;
+      // arrangement.doc = data;
+      // console.log(data.delta);
+      jsondiffpatch.patch(arrangement.doc, data.delta);
+      // console.log(arrangement.doc);
+      arrangement.doc.temp = true;
+      // console.log('nambah2');
+      self.stackCounter++;
+
+      $rootScope.$apply(function() {
+        $rootScope.arrangement = arrangement.doc;  
+      });
+
+      $rootScope.$emit('sync');
+      $rootScope.$emit('synced');
+      $rootScope.$emit('loadWatcher');
+    }
+  });
+
+  // SOCKET
+
+  var watchComponent = function(newValue, delta) {
+    var newDoc = newValue;
+    // console.log(self.stackCounter);
+    // if (self.stackCounter == 0) {
+    //   newDoc.temp = false;
+    // }
+
+    if (!newDoc.temp) {
+      // console.log('send');
+      // console.log(window.performance.now() + window.performance.timing.navigationStart);
+      
+      self.stackCounter++;
+      // console.log('nambah1');
+      
+      // newDoc.temp = true;
+
+      socket.emit('replicate', {_id: newDoc._id, delta: delta}); 
+      
+      delete newDoc['_rev'];
+      delete newDoc['_id'];
+      delete newDoc['temp'];
+
+      arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
+        return newDoc;
+      }).then(function(result) {
+        if (self.stackCounter > 0)
+          self.stackCounter--;
+      }).catch(function(error) {
+        console.log('failed to update');
+      });
+
+    }
   }
 
   $rootScope.$watch('arrangement', function(newValue, oldValue){
-    // console.log('CHANGE HAPPEN');
     if (newValue && oldValue) {
       if (newValue._rev == oldValue._rev) {
-          watchComponent(newValue);
+        var delta = jsondiffpatch.diff(oldValue, newValue);
+        watchComponent(newValue, delta);
       }
     }
   }, true);
 
   return arrangement;
 });
+
 
