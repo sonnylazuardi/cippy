@@ -41,15 +41,15 @@ app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
       controller: 'EditorController',
       resolve: {
         authenticated: function($q, $location, $auth) {
-          // var deferred = $q.defer();
+          var deferred = $q.defer();
 
-          // if (!$auth.isAuthenticated()) {
-          //   $location.path('/home');
-          // } else {
-          //   deferred.resolve();
-          // }
+          if (!$auth.isAuthenticated()) {
+            $location.path('/home');
+          } else {
+            deferred.resolve();
+          }
 
-          // return deferred.promise;
+          return deferred.promise;
           return;
         }
       },

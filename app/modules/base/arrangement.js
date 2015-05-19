@@ -1,3 +1,4 @@
+
 app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, CouchURL, _ArrangementDB, $interval){
   var self = this;
   var timeInit = 0;
