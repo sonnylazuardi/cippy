@@ -902,7 +902,7 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
     var test = new PouchDB(CouchURL + _ArrangementDB);
     test.get(arrangement.arrangement_id).then(function(data) {
       console.log(data.timestamp);
-      alert(data.timestamp);
+      // alert(data.timestamp);
       return def.resolve(arrangement.offlineStamp != data.timestamp);
         
     });
@@ -1011,8 +1011,6 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
   }
 
   arrangement.goOnline = function() {
-    // arrangement.checkOffline().then(function (conflict) {
-    //   if (!conflict) {
     arrangement.push();
   }
 
@@ -1733,157 +1731,6 @@ app.directive('waveForm', ['$rootScope', '$compile', 'EditorConfig',
         if(unwatchOffsetEnd) unwatchOffsetEnd();
       });
     }
-  }
-}]);
-app.controller('RecordingController', function($scope, SharedAudioContext, Arrangement, BufferedRecordingNode){
-    var audioStream, audioInput, analyser, gainControl;
-
-    // Stops all streams and the recording
-    var stopRecording = function(){
-      if($scope.recorder)
-        $scope.recorder.stop();
-
-      gainControl.disconnect();
-      analyser.disconnect();
-      audioInput.disconnect();
-      audioStream.stop();
-      $scope.isRecording = false;
-    };
-
-    var cleanUp = function(){
-      $scope.isUploading = false;
-      $scope.uploadProgress = 0;
-      $scope.speakers = false;
-      $scope.analyser = null;
-      $scope.showRecording = false;
-      $scope.file = null;
-      $scope.recorder = null;
-      $scope.recordedNode = null;
-    };
-
-    $scope.uploadRecording = function(){
-      $scope.isUploading = true;
-      Arrangement.uploadBuffer($scope.file).then(function(uploadedFile){
-        // FileBrowser.setActiveFile(uploadedFile.name);
-        // FileBrowser.show();
-        $scope.cancelRecording();
-      }, function(err){
-        console.log('There was an error!', err);
-      }, function(percent){
-        $scope.uploadProgress = percent;
-      });
-    };
-
-    $scope.triggerRecording = function(){
-      if($scope.isRecording){
-        $scope.recorder.exportWAV(function(file){
-          $scope.file = file;
-          $scope.file.name = "new_recording_" + Date.now();
-          var fileReader = new FileReader();
-          fileReader.onload = function(){
-            var arrBuffer = this.result;
-            SharedAudioContext.getContext().decodeAudioData(arrBuffer, function(buffer){
-              $scope.$apply(function(){
-                $scope.recordedNode = new BufferedRecordingNode({}, buffer);
-              });
-            })
-          };
-          fileReader.readAsArrayBuffer(file);
-        });
-
-        stopRecording();
-      }else{
-        $scope.isRecording = true;
-        $scope.recorder = new Recorder(analyser, {
-          workerPath: 'dist/workers/recorderWorker.js'
-        });
-        $scope.recorder.record();
-      }
-    };
-
-    $scope.cancelRecording = function(){
-      stopRecording();
-      cleanUp();
-      $scope.removeAdditionalContent();
-    };
-
-    $scope.playRecording = function(){
-      if(!$scope.recordedNode) return;
-      if($scope.recordedNode.isPlaying())
-        $scope.recordedNode.stop();
-      else
-        $scope.recordedNode.play()
-    }
-
-    $scope.$watch('speakers', function(){
-      if (!gainControl) return;
-      if($scope.speakers){
-        gainControl.connect(SharedAudioContext.getContext().destination);
-      }else{
-        gainControl.disconnect();
-      }
-    })
-
-    // ask for microphone access
-    navigator.getUserMedia({audio: true}, function(stream){
-      var context = SharedAudioContext.getContext();
-      audioStream = stream;
-      audioInput = context.createMediaStreamSource(audioStream);
-      analyser = context.createAnalyser();
-
-      audioInput.connect(analyser);
-      gainControl = context.createGain();
-      gainControl.gain.value = 1;
-      audioInput.connect(gainControl);
-      if($scope.speakers)
-        gainControl.connect(context.destination);
-
-      $scope.$apply(function(){
-        $scope.analyser = analyser;
-      });
-    },function(err){
-      console.log(err);
-      // TODO: add proper error handling, especially for the case when users accidentally block the mic
-      alert('We did not get access to your microphone, please reload and allow access again!');
-    });
-
-});
-app.directive('recordingElement', function() {
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/recording/recording-element.html',
-    controller: 'RecordingController'
-  }
-});
-app.controller('RecordingSelectionController', ['$rootScope', '$scope',
-  function($rootScope, $scope){
-
-  var close = function(){
-    $scope.node = null;
-    $scope.buffer = null;
-    $scope.showRecordingSelection = false;
-  };
-
-  $scope.playSelection = function(){
-    $scope.node.play();
-  };
-
-  $scope.uploadSelection = function(){
-    
-  };
-
-  $scope.deleteRecording = function(){
-
-  };
-
-}]);
-app.directive('recordingSelection', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
-  function($rootScope, $compile, EditorConfig, Arrangement) {
-
-  return {
-    restrict: 'A',
-    controller: 'RecordingSelectionController',
-    templateUrl: 'recording/recording-selection.html'
   }
 }]);
 app.directive('beatsGrid', function($compile, EditorConfig, Drumkits, $rootScope, Arrangement) {
@@ -2669,6 +2516,157 @@ app.directive('duoRangeHandle', ['$compile', 'EditorConfig',
     }
   }
 }]);
+app.controller('RecordingController', function($scope, SharedAudioContext, Arrangement, BufferedRecordingNode){
+    var audioStream, audioInput, analyser, gainControl;
+
+    // Stops all streams and the recording
+    var stopRecording = function(){
+      if($scope.recorder)
+        $scope.recorder.stop();
+
+      gainControl.disconnect();
+      analyser.disconnect();
+      audioInput.disconnect();
+      audioStream.stop();
+      $scope.isRecording = false;
+    };
+
+    var cleanUp = function(){
+      $scope.isUploading = false;
+      $scope.uploadProgress = 0;
+      $scope.speakers = false;
+      $scope.analyser = null;
+      $scope.showRecording = false;
+      $scope.file = null;
+      $scope.recorder = null;
+      $scope.recordedNode = null;
+    };
+
+    $scope.uploadRecording = function(){
+      $scope.isUploading = true;
+      Arrangement.uploadBuffer($scope.file).then(function(uploadedFile){
+        // FileBrowser.setActiveFile(uploadedFile.name);
+        // FileBrowser.show();
+        $scope.cancelRecording();
+      }, function(err){
+        console.log('There was an error!', err);
+      }, function(percent){
+        $scope.uploadProgress = percent;
+      });
+    };
+
+    $scope.triggerRecording = function(){
+      if($scope.isRecording){
+        $scope.recorder.exportWAV(function(file){
+          $scope.file = file;
+          $scope.file.name = "new_recording_" + Date.now();
+          var fileReader = new FileReader();
+          fileReader.onload = function(){
+            var arrBuffer = this.result;
+            SharedAudioContext.getContext().decodeAudioData(arrBuffer, function(buffer){
+              $scope.$apply(function(){
+                $scope.recordedNode = new BufferedRecordingNode({}, buffer);
+              });
+            })
+          };
+          fileReader.readAsArrayBuffer(file);
+        });
+
+        stopRecording();
+      }else{
+        $scope.isRecording = true;
+        $scope.recorder = new Recorder(analyser, {
+          workerPath: 'dist/workers/recorderWorker.js'
+        });
+        $scope.recorder.record();
+      }
+    };
+
+    $scope.cancelRecording = function(){
+      stopRecording();
+      cleanUp();
+      $scope.removeAdditionalContent();
+    };
+
+    $scope.playRecording = function(){
+      if(!$scope.recordedNode) return;
+      if($scope.recordedNode.isPlaying())
+        $scope.recordedNode.stop();
+      else
+        $scope.recordedNode.play()
+    }
+
+    $scope.$watch('speakers', function(){
+      if (!gainControl) return;
+      if($scope.speakers){
+        gainControl.connect(SharedAudioContext.getContext().destination);
+      }else{
+        gainControl.disconnect();
+      }
+    })
+
+    // ask for microphone access
+    navigator.getUserMedia({audio: true}, function(stream){
+      var context = SharedAudioContext.getContext();
+      audioStream = stream;
+      audioInput = context.createMediaStreamSource(audioStream);
+      analyser = context.createAnalyser();
+
+      audioInput.connect(analyser);
+      gainControl = context.createGain();
+      gainControl.gain.value = 1;
+      audioInput.connect(gainControl);
+      if($scope.speakers)
+        gainControl.connect(context.destination);
+
+      $scope.$apply(function(){
+        $scope.analyser = analyser;
+      });
+    },function(err){
+      console.log(err);
+      // TODO: add proper error handling, especially for the case when users accidentally block the mic
+      alert('We did not get access to your microphone, please reload and allow access again!');
+    });
+
+});
+app.directive('recordingElement', function() {
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/recording/recording-element.html',
+    controller: 'RecordingController'
+  }
+});
+app.controller('RecordingSelectionController', ['$rootScope', '$scope',
+  function($rootScope, $scope){
+
+  var close = function(){
+    $scope.node = null;
+    $scope.buffer = null;
+    $scope.showRecordingSelection = false;
+  };
+
+  $scope.playSelection = function(){
+    $scope.node.play();
+  };
+
+  $scope.uploadSelection = function(){
+    
+  };
+
+  $scope.deleteRecording = function(){
+
+  };
+
+}]);
+app.directive('recordingSelection', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
+  function($rootScope, $compile, EditorConfig, Arrangement) {
+
+  return {
+    restrict: 'A',
+    controller: 'RecordingSelectionController',
+    templateUrl: 'recording/recording-selection.html'
+  }
+}]);
 app.controller('HomeController', function($rootScope, $scope, $auth, $state){
 
   if ($auth.isAuthenticated()) {
@@ -2807,280 +2805,6 @@ app.directive('time', function() {
         }
     }
 });
-/**
- * Caches and optimizes loading of buffers
- */
-app.service('BufferLoader', function($q, $rootScope, SharedAudioContext, AudioCache){
-  return {
-    _cache: {},
-
-    _deferreds: {},
-
-    /**
-     * Checks the cache and the deferred objects first before loading the bugger
-     * @param  {String} bufferLocation The location of the buffer
-     * @return {Deferred} a deffered object
-     */
-    load: function(buffer){
-      var bufferLocation = buffer.location;
-      // check if it's in the cache
-      if(this._cache[bufferLocation]){
-        var deferred = $q.defer();
-        deferred.resolve(this._cache[bufferLocation]);
-        return deferred.promise;
-      // check if we're already loading the buffer
-      }else if(this._deferreds[bufferLocation])
-        return this._deferreds[bufferLocation].promise;
-      // create a new deferred and load the buffer
-      else
-        return this._load(bufferLocation);
-    },
-
-    /**
-     * Loads the buffer from the defined source and makes sure
-     * that all deferreds are logged properly
-     */
-    _load: function(bufferLocation){
-      // new deffered for this request
-      var deferred = $q.defer();
-      this._deferreds[bufferLocation] = deferred;
-
-      // load the buffer
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', bufferLocation, true);
-      xhr.responseType = 'arraybuffer';
-      xhr.addEventListener("error",  this._transferFailed(bufferLocation, deferred), false);
-      xhr.addEventListener("load", this._transferComplete(bufferLocation, deferred), false);
-      xhr.onload = function(e) {
-        this._decodeAudio(xhr.response, deferred, bufferLocation);
-      }.bind(this);
-      xhr.send();
-
-      return deferred.promise;
-    },
-
-    _transferFailed: function(bufferLocation, deferred) {
-      var self = this;
-      // alert("An error occurred while transferring the file.");
-      var splitter = bufferLocation.split('/');
-      AudioCache.getCache(splitter[3]).then(function (result) {
-        // var arrayBuffer;
-        // var fileReader = new FileReader();
-        // fileReader.onload = function() {
-
-            function ab2str(buf) {
-              return String.fromCharCode.apply(null, new Uint16Array(buf));
-            }
-            function str2ab(str) {
-              var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
-              var bufView = new Uint16Array(buf);
-              for (var i=0, strLen=str.length; i < strLen; i++) {
-                bufView[i] = str.charCodeAt(i);
-              }
-              return buf;
-            }
-            // console.log(result);
-            // var base64String = Base64Binary.decodeArrayBuffer(result);
-            // console.log('SAPI');
-            // console.log(base64String);
-            // arrayBuffer = this.result;
-            // console.log("SAPI");
-            // console.log(ab2str(result));
-            self._decodeAudio(result, deferred, bufferLocation);
-        // };
-        // console.log(result);
-        // fileReader.readAsArrayBuffer(result);
-        // return this._decodeAudio()
-      });
-    
-      // AudioCache.putCache(bufferLocation, splitter[3]);
-    },
-
-    _transferComplete: function(bufferLocation) {
-      // var def = $q.defer();
-      // alert("An error occurred while transferring the file.");
-      var splitter = bufferLocation.split('/');
-      AudioCache.putCache(bufferLocation, splitter[3]);
-      
-      // return def.promise;
-      // AudioCache.putCache(bufferLocation, splitter[3]);
-    },
-
-
-    /**
-     * Decoded's the audio, caches the buffer and resolves the deferreds
-     */
-    _decodeAudio: function(arrayBuffer, deferred, bufferLocation){
-      function ab2str(buf) {
-        return String.fromCharCode.apply(null, new Uint16Array(buf));
-      }
-      function str2ab(str) {
-        var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
-        var bufView = new Uint16Array(buf);
-        for (var i=0, strLen=str.length; i < strLen; i++) {
-          bufView[i] = str.charCodeAt(i);
-        }
-        return buf;
-      }
-      // console.log('ONTA');
-      // console.log(ab2str(arrayBuffer));
-      // console.log("SAPI");
-      // console.log(ab2str(result));
-      SharedAudioContext.getContext().decodeAudioData(arrayBuffer, function(buffer) {
-        this._deferreds[bufferLocation] = undefined;
-        this._cache[bufferLocation] = buffer;
-        deferred.resolve(buffer);
-        $rootScope.$emit('bufferloader:loaded', buffer);
-      }.bind(this), function(e) {
-        deferred.reject('Error decoding file', e);
-      });
-    }
-  };
-});
-/**
- * Uploads buffers to the server
- */
-app.factory('BufferUploader', ['$q', '$rootScope', 'IDGenerator', function($q, $rootScope, IDGenerator){
-
-  return {
-    /**
-     * A list of ongoing deferreds
-     */
-    _deferreds: {},
-
-    /**
-     * A list of ongoing requests
-     */
-    _requests: {},
-
-    /**
-     * Checks if the filetype is supported
-     */
-    supportsUploadOf: function(file){
-      return (file.type && (file.type == 'audio/mp3' || file.type == 'audio/wav' || file.type == 'audio/ogg'));
-    },
-
-    /**
-     * Uploads a file to the specified arrangement
-     * @param  {String} arrangementId Id of the arrangement
-     * @param  {File} file the file
-     * @return {Promise}
-     */
-    upload: function(arrangementId, file){
-      if(!this.supportsUploadOf(file)){
-        var deferred = $q.defer();
-        deferred.reject('Wrong filetype! ' + file.type);
-        return deferred.promise;
-      }
-
-      var fileName = file.name;
-      if(this._deferreds[fileName])
-        return this._deferreds[fileName].promise;
-      else
-        return this._upload(arrangementId, file);
-    },
-
-    _upload: function(arrangementId, file){
-      // new deffered for this request
-      var fileName = file.name;
-      var id = [arrangementId, IDGenerator.generate('buffer'), fileName].join('___');
-      var deferred = $q.defer();
-      this._deferreds[fileName] = deferred;
-
-      var uploader = this;
-      var s3Upload = new S3Upload({
-        s3_object_name: id,
-        s3_sign_put_url: '/sign_s3',
-        onProgress: function(percent, message) {
-          console.log('Upload progress: ' + percent + '% ' + message);
-          deferred.notify(percent);
-        },
-        onFinishS3Put: function(public_url) {
-          uploader._uploadComplete(public_url, deferred, fileName, id);
-          console.log('uploaddone', public_url)
-        },
-        onError: function(status) {
-          console.log('error', 'upload', status)
-        }
-      });
-
-      s3Upload.uploadFile(file);
-
-      this._requests[fileName] = s3Upload;
-
-      return deferred.promise;
-    },
-
-    _uploadComplete: function(url, deferred, fileName, id){
-      // delete all cached objects
-      delete this._requests[fileName];
-      delete this._deferreds[fileName];
-
-      // the newly created buffer object
-      var buffer = {
-        id: id,
-        location: url,
-        name: fileName
-      };
-
-      $rootScope.$emit('bufferuploader:done');
-
-      deferred.resolve(buffer);
-    },
-
-    totalFiles: function(){
-
-    }
-  };
-}]);
-/**
- * Generates IDs for the components
- */
-app.service('IDGenerator', function(){
-  return {
-    /**
-     * Generates a String ID
-     * @param  {String} base prefix for the id
-     */
-    generate: function(base){
-      var id = base ? base + '_' : '';
-      var date = Date.now();
-      var r = Math.random() * 999999;
-      id += Math.random() * (date * r);
-      return id;
-    }
-  }
-});
-app.factory('SharedAudioContext', [function(){
-  var context;
-  return {
-    getContext: function(){
-      if(!context)
-        context = new AudioContext();
-      return context;
-    }
-  }
-}]);
-// sanitizes the AudioContext
-window.AudioContext = window.AudioContext || window.webkitAudioContext;
-
-// sanitizes getUserMedia
-navigator.getUserMedia  = navigator.getUserMedia ||
-                          navigator.webkitGetUserMedia ||
-                          navigator.mozGetUserMedia ||
-                          navigator.msGetUserMedia;
-app.factory('utils', [function(){
-  return {
-    /**
-     * Returns a copy of the passed object
-     * @param  {Object} obj The object that should be copied
-     * @return {Object}     the copy
-     */
-    deepCopy: function(obj){
-      return JSON.parse(JSON.stringify(obj));
-    }
-  };
-}]);
 app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, $stateParams){
     
   $scope.arrangement_id = $stateParams.arrangement_id;
@@ -3150,7 +2874,7 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
       Arrangement.offlineState = false;
       Arrangement.offlineStamp = _.clone(Arrangement.doc.timestamp, true);
       Arrangement.goOffline();
-      alert(Arrangement.offlineStamp);
+      // alert(Arrangement.offlineStamp);
       offline = _.clone(Arrangement.doc, true);
       // Arrangement.offline = [];
       // console.log(offline);
@@ -3166,7 +2890,7 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
       // console.log(currentDoc);
       var delta = jsondiffpatch.diff(offline, currentDoc);
       if (delta) {
-        console.log(delta);
+        // console.log(delta);
         Arrangement.delta = delta;
       }      
     });
@@ -3934,6 +3658,280 @@ app.directive('timeLine', ['$rootScope', 'Arrangement', 'EditorConfig', 'Schedul
       });
     }
   }
+}]);
+/**
+ * Caches and optimizes loading of buffers
+ */
+app.service('BufferLoader', function($q, $rootScope, SharedAudioContext, AudioCache){
+  return {
+    _cache: {},
+
+    _deferreds: {},
+
+    /**
+     * Checks the cache and the deferred objects first before loading the bugger
+     * @param  {String} bufferLocation The location of the buffer
+     * @return {Deferred} a deffered object
+     */
+    load: function(buffer){
+      var bufferLocation = buffer.location;
+      // check if it's in the cache
+      if(this._cache[bufferLocation]){
+        var deferred = $q.defer();
+        deferred.resolve(this._cache[bufferLocation]);
+        return deferred.promise;
+      // check if we're already loading the buffer
+      }else if(this._deferreds[bufferLocation])
+        return this._deferreds[bufferLocation].promise;
+      // create a new deferred and load the buffer
+      else
+        return this._load(bufferLocation);
+    },
+
+    /**
+     * Loads the buffer from the defined source and makes sure
+     * that all deferreds are logged properly
+     */
+    _load: function(bufferLocation){
+      // new deffered for this request
+      var deferred = $q.defer();
+      this._deferreds[bufferLocation] = deferred;
+
+      // load the buffer
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', bufferLocation, true);
+      xhr.responseType = 'arraybuffer';
+      xhr.addEventListener("error",  this._transferFailed(bufferLocation, deferred), false);
+      xhr.addEventListener("load", this._transferComplete(bufferLocation, deferred), false);
+      xhr.onload = function(e) {
+        this._decodeAudio(xhr.response, deferred, bufferLocation);
+      }.bind(this);
+      xhr.send();
+
+      return deferred.promise;
+    },
+
+    _transferFailed: function(bufferLocation, deferred) {
+      var self = this;
+      // alert("An error occurred while transferring the file.");
+      var splitter = bufferLocation.split('/');
+      AudioCache.getCache(splitter[3]).then(function (result) {
+        // var arrayBuffer;
+        // var fileReader = new FileReader();
+        // fileReader.onload = function() {
+
+            function ab2str(buf) {
+              return String.fromCharCode.apply(null, new Uint16Array(buf));
+            }
+            function str2ab(str) {
+              var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
+              var bufView = new Uint16Array(buf);
+              for (var i=0, strLen=str.length; i < strLen; i++) {
+                bufView[i] = str.charCodeAt(i);
+              }
+              return buf;
+            }
+            // console.log(result);
+            // var base64String = Base64Binary.decodeArrayBuffer(result);
+            // console.log('SAPI');
+            // console.log(base64String);
+            // arrayBuffer = this.result;
+            // console.log("SAPI");
+            // console.log(ab2str(result));
+            self._decodeAudio(result, deferred, bufferLocation);
+        // };
+        // console.log(result);
+        // fileReader.readAsArrayBuffer(result);
+        // return this._decodeAudio()
+      });
+    
+      // AudioCache.putCache(bufferLocation, splitter[3]);
+    },
+
+    _transferComplete: function(bufferLocation) {
+      // var def = $q.defer();
+      // alert("An error occurred while transferring the file.");
+      var splitter = bufferLocation.split('/');
+      AudioCache.putCache(bufferLocation, splitter[3]);
+      
+      // return def.promise;
+      // AudioCache.putCache(bufferLocation, splitter[3]);
+    },
+
+
+    /**
+     * Decoded's the audio, caches the buffer and resolves the deferreds
+     */
+    _decodeAudio: function(arrayBuffer, deferred, bufferLocation){
+      function ab2str(buf) {
+        return String.fromCharCode.apply(null, new Uint16Array(buf));
+      }
+      function str2ab(str) {
+        var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
+        var bufView = new Uint16Array(buf);
+        for (var i=0, strLen=str.length; i < strLen; i++) {
+          bufView[i] = str.charCodeAt(i);
+        }
+        return buf;
+      }
+      // console.log('ONTA');
+      // console.log(ab2str(arrayBuffer));
+      // console.log("SAPI");
+      // console.log(ab2str(result));
+      SharedAudioContext.getContext().decodeAudioData(arrayBuffer, function(buffer) {
+        this._deferreds[bufferLocation] = undefined;
+        this._cache[bufferLocation] = buffer;
+        deferred.resolve(buffer);
+        $rootScope.$emit('bufferloader:loaded', buffer);
+      }.bind(this), function(e) {
+        deferred.reject('Error decoding file', e);
+      });
+    }
+  };
+});
+/**
+ * Uploads buffers to the server
+ */
+app.factory('BufferUploader', ['$q', '$rootScope', 'IDGenerator', function($q, $rootScope, IDGenerator){
+
+  return {
+    /**
+     * A list of ongoing deferreds
+     */
+    _deferreds: {},
+
+    /**
+     * A list of ongoing requests
+     */
+    _requests: {},
+
+    /**
+     * Checks if the filetype is supported
+     */
+    supportsUploadOf: function(file){
+      return (file.type && (file.type == 'audio/mp3' || file.type == 'audio/wav' || file.type == 'audio/ogg'));
+    },
+
+    /**
+     * Uploads a file to the specified arrangement
+     * @param  {String} arrangementId Id of the arrangement
+     * @param  {File} file the file
+     * @return {Promise}
+     */
+    upload: function(arrangementId, file){
+      if(!this.supportsUploadOf(file)){
+        var deferred = $q.defer();
+        deferred.reject('Wrong filetype! ' + file.type);
+        return deferred.promise;
+      }
+
+      var fileName = file.name;
+      if(this._deferreds[fileName])
+        return this._deferreds[fileName].promise;
+      else
+        return this._upload(arrangementId, file);
+    },
+
+    _upload: function(arrangementId, file){
+      // new deffered for this request
+      var fileName = file.name;
+      var id = [arrangementId, IDGenerator.generate('buffer'), fileName].join('___');
+      var deferred = $q.defer();
+      this._deferreds[fileName] = deferred;
+
+      var uploader = this;
+      var s3Upload = new S3Upload({
+        s3_object_name: id,
+        s3_sign_put_url: '/sign_s3',
+        onProgress: function(percent, message) {
+          console.log('Upload progress: ' + percent + '% ' + message);
+          deferred.notify(percent);
+        },
+        onFinishS3Put: function(public_url) {
+          uploader._uploadComplete(public_url, deferred, fileName, id);
+          console.log('uploaddone', public_url)
+        },
+        onError: function(status) {
+          console.log('error', 'upload', status)
+        }
+      });
+
+      s3Upload.uploadFile(file);
+
+      this._requests[fileName] = s3Upload;
+
+      return deferred.promise;
+    },
+
+    _uploadComplete: function(url, deferred, fileName, id){
+      // delete all cached objects
+      delete this._requests[fileName];
+      delete this._deferreds[fileName];
+
+      // the newly created buffer object
+      var buffer = {
+        id: id,
+        location: url,
+        name: fileName
+      };
+
+      $rootScope.$emit('bufferuploader:done');
+
+      deferred.resolve(buffer);
+    },
+
+    totalFiles: function(){
+
+    }
+  };
+}]);
+/**
+ * Generates IDs for the components
+ */
+app.service('IDGenerator', function(){
+  return {
+    /**
+     * Generates a String ID
+     * @param  {String} base prefix for the id
+     */
+    generate: function(base){
+      var id = base ? base + '_' : '';
+      var date = Date.now();
+      var r = Math.random() * 999999;
+      id += Math.random() * (date * r);
+      return id;
+    }
+  }
+});
+app.factory('SharedAudioContext', [function(){
+  var context;
+  return {
+    getContext: function(){
+      if(!context)
+        context = new AudioContext();
+      return context;
+    }
+  }
+}]);
+// sanitizes the AudioContext
+window.AudioContext = window.AudioContext || window.webkitAudioContext;
+
+// sanitizes getUserMedia
+navigator.getUserMedia  = navigator.getUserMedia ||
+                          navigator.webkitGetUserMedia ||
+                          navigator.mozGetUserMedia ||
+                          navigator.msGetUserMedia;
+app.factory('utils', [function(){
+  return {
+    /**
+     * Returns a copy of the passed object
+     * @param  {Object} obj The object that should be copied
+     * @return {Object}     the copy
+     */
+    deepCopy: function(obj){
+      return JSON.parse(JSON.stringify(obj));
+    }
+  };
 }]);
 app.factory('Account', function($http) {
   

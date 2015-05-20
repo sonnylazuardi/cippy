@@ -21,7 +21,7 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
       Arrangement.offlineState = false;
       Arrangement.offlineStamp = _.clone(Arrangement.doc.timestamp, true);
       Arrangement.goOffline();
-      alert(Arrangement.offlineStamp);
+      // alert(Arrangement.offlineStamp);
       offline = _.clone(Arrangement.doc, true);
       // Arrangement.offline = [];
       // console.log(offline);
@@ -37,7 +37,7 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
       // console.log(currentDoc);
       var delta = jsondiffpatch.diff(offline, currentDoc);
       if (delta) {
-        console.log(delta);
+        // console.log(delta);
         Arrangement.delta = delta;
       }      
     });

@@ -161,7 +161,7 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
     var test = new PouchDB(CouchURL + _ArrangementDB);
     test.get(arrangement.arrangement_id).then(function(data) {
       console.log(data.timestamp);
-      alert(data.timestamp);
+      // alert(data.timestamp);
       return def.resolve(arrangement.offlineStamp != data.timestamp);
         
     });
@@ -270,8 +270,6 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
   }
 
   arrangement.goOnline = function() {
-    // arrangement.checkOffline().then(function (conflict) {
-    //   if (!conflict) {
     arrangement.push();
   }
 
