@@ -7,6 +7,9 @@
     <div>
       {{user.displayName}}
     </div>
+    <div>
+      <button class="topcoat-button--large chat-button" ui-sref="logout">Logout</button>
+    </div>
   </div>
   <div class="center">
     <div class="row">
@@ -23,6 +26,7 @@
         <ul class="list">
           <li ng-repeat="project in shared">
             <a href="#/editor/{{project.arrangement}}"><i class="fa fa-music"></i>&nbsp; {{project.title}}</a> 
+             <button class="topcoat-button" ng-click="removeShared(project)"> <i class="fa fa-remove"></i> </button>
           </li>
         </ul>
       </div>

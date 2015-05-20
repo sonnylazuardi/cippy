@@ -12,8 +12,9 @@ app.constant('_ChatDB', 'cippy_chats');
 app.constant('_UserDB', 'cippy_users');
 app.constant('_SharedDB', 'cippy_shared');
 app.constant('_ProjectDB', 'cippy_projects');
+
 app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
-  
+
   $authProvider.facebook({
     clientId: '468348829982756'
   });
@@ -53,5 +54,10 @@ app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
           return;
         }
       },
+    })
+    .state('editor_test', {
+      url: "/editor_test/:arrangement_id",
+      templateUrl: "partials/editor.html",
+      controller: 'EditorController',
     });
 });

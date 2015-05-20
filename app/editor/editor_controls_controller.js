@@ -1,4 +1,4 @@
-app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser){
+app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser, $state){
 
   $rootScope.showCommunicationPanel = false;
   $rootScope.showSharePanel = false;
@@ -56,6 +56,10 @@ app.controller('EditorControlsController', function($rootScope, $scope, Schedule
 
   $scope.showShare = function(){
     $rootScope.showSharePanel = true;
+  };
+
+  $scope.backProject = function(){
+    $state.go('project');
   };
 
   $scope.isCommunicationPanelVisible = function(){

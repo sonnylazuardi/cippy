@@ -1,4 +1,5 @@
 app.factory('Account', function($http) {
+  
   return {
     getProfile: function() {
       // console.log('getProfile');

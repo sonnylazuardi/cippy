@@ -12,8 +12,9 @@ app.constant('_ChatDB', 'cippy_chats');
 app.constant('_UserDB', 'cippy_users');
 app.constant('_SharedDB', 'cippy_shared');
 app.constant('_ProjectDB', 'cippy_projects');
+
 app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
-  
+
   $authProvider.facebook({
     clientId: '468348829982756'
   });
@@ -53,6 +54,11 @@ app.config(function($stateProvider, $urlRouterProvider, $authProvider) {
           return;
         }
       },
+    })
+    .state('editor_test', {
+      url: "/editor_test/:arrangement_id",
+      templateUrl: "partials/editor.html",
+      controller: 'EditorController',
     });
 });
 app.factory('BaseAudioNode', [function(){
@@ -734,14 +740,32 @@ app.factory('Track', ['BaseAudioNode', 'Arrangement',
 
 }]);
 
-app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, CouchURL, _ArrangementDB, $interval){
+app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, CouchURL, _ArrangementDB, $interval){
   var self = this;
   var timeInit = 0;
   var timeSend = 0;
   var timeReceive = 0;
-  self.stackCounter = 0;
+
   var arrangement = {
     doc: {},
+
+    offline: {},
+
+    delta: {},
+
+    offlineStamp: {},
+
+    shadow: {},
+
+    lastRev: {},
+
+    queue: {},
+
+    timesock: null,
+
+    stackCounter: 0,
+
+    onlineState: true,
 
     _rev: '',
 
@@ -873,66 +897,184 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.compressor.connect(arrangement.context.destination);
   arrangement.db = {}
 
+  arrangement.checkOffline = function() {
+    var def = $q.defer();
+    var test = new PouchDB(CouchURL + _ArrangementDB);
+    test.get(arrangement.arrangement_id).then(function(data) {
+      console.log(data.timestamp);
+      alert(data.timestamp);
+      return def.resolve(arrangement.offlineStamp != data.timestamp);
+        
+    });
+    return def.promise;
+  }
+
+  arrangement.conflict = function() {
+    alert('This arrangement has a conflict with previous version. It will be forked to new arrangement.');
+    var newID =  arrangement.arrangement_id + '-conflicted-' + moment().format('YYYY-MM-DD-HH:mm:ss');
+    arrangement.db.putIfNotExists({
+      _id: newID,
+      title: arrangement.doc.title,
+      author: arrangement.doc.author,
+      buffers: arrangement.doc.buffers,
+      tracks: arrangement.doc.tracks,
+      timestamp: arrangement.doc.timestamp,
+    }).then(function (data) {
+      $state.go('editor', {arrangement_id: newID});
+    });
+  }
+
   arrangement.syncing = function(doc) {
+    arrangement.onlineState = true;
     // alert('sync');
-    // console.log(doc);
+    console.log('SYNCING');
+    console.log(doc);
     if (doc.id == arrangement.arrangement_id) {
 
+      function doUpdate(callback) {
+        if (!_.isEmpty(arrangement.delta)) {
+
+          arrangement.checkOffline().then(function (conflict) {
+            if (conflict) {
+              arrangement.conflict();
+            }
+          });
+          arrangement.delta = {};
+
+        } else {
+
+          $rootScope.$apply(function() {
+            if (!_.isEmpty(arrangement.queue)) {
+              var a = angular.copy(arrangement.doc);
+              var b = angular.copy(doc.doc);
+              delete a['_rev'];
+              delete b['_rev'];
+              delete a['temp'];
+              delete a['temp'];
+              delete a['timestamp'];
+              delete b['timestamp'];
+              var delta = jsondiffpatch.diff(a, b);
+              if (!delta) {
+                console.log('CHECK');
+                arrangement.temp = false;
+                arrangement.doc = doc.doc;
+              }
+            } else {
+              console.log('CHECK');
+              arrangement.temp = false;
+              arrangement.doc = doc.doc;
+            }
+            $rootScope.arrangement = arrangement.doc;
+          });
+
+        }
+      }
+
+      if (arrangement.timesock) {
+        if (doc.doc.timestamp >= arrangement.timesock) {
+          console.log('UPDATE!!!');
+          doUpdate();
+          arrangement.timesock = null;
+        }
+      } else {
+        doUpdate();
+      } 
+
       arrangement.doc._rev = doc.doc._rev;
-      if (self.stackCounter > 0) {
-        self.stackCounter--;
-      }
 
-      if (self.stackCounter == 0) {
-        arrangement.temp = false;
-        arrangement.doc = doc.doc;
-        $rootScope.$apply(function() {
-          $rootScope.arrangement = arrangement.doc;  
-        });
-      }
-
-      // console.log(self.stackCounter);
-         
-      // console.log('sync-receive');
-      // console.log(window.performance.now() + window.performance.timing.navigationStart);
 
       $rootScope.$emit('sync');
       $rootScope.$emit('synced');
       $rootScope.$emit('loadWatcher');
     }
   };
+
+  arrangement.goOffline = function() {
+
+  }
+
+  arrangement.push = function() {
+    console.log('PUT SENDING');
+
+    var newDoc = arrangement.doc;
+    delete newDoc['_rev'];
+    delete newDoc['_id'];
+    delete newDoc['temp'];
+    delete newDoc['timesock'];
+
+    arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
+      return newDoc;
+    }).then(function(result) {
+    }).catch(function(error) {
+      console.log('failed to update');
+    });
+  }
+
+  arrangement.goOnline = function() {
+    // arrangement.checkOffline().then(function (conflict) {
+    //   if (!conflict) {
+    arrangement.push();
+  }
+
+  arrangement.sync = function() {
+    var opts = {
+      live: true, 
+      retry: true,
+      since: 'now',
+      include_docs: true,
+      conflicts: true
+    };
+    arrangement.db.sync(CouchURL + _ArrangementDB, opts);
+  }
   
   arrangement.init = function() {
-    // var newDoc = {
-    //   _id: arrangement.arrangement_id,
-    //   tracks: [],
-    //   buffers: [],
-    // };
-    // db.putIfNotExists(arrangement.arrangement_id, newDoc);
-    arrangement.db = new PouchDB(_ArrangementDB);
-    console.log('init1');
-    console.log(window.performance.now());
+    
+    arrangement.db = new PouchDB(_ArrangementDB, {auto_compaction: true});
 
-    arrangement.db.get(arrangement.arrangement_id).then(function (doc) {
-      console.log('init2');
-      console.log(window.performance.now());
+    // DESTROY
+    // arrangement.db.destroy().then(function() {
+    //   console.log('DESTRYED');
+    // });
 
-      arrangement.doc = doc;
-      $rootScope.arrangement = arrangement.doc;
+    console.log(arrangement.arrangement_id);
 
-      $rootScope.$emit('sync');
-      $rootScope.$emit('synced');
-    });
+    var load = function() {
+      arrangement.db.get(arrangement.arrangement_id).then(function (doc) {
+        console.log(doc);
+      
+        arrangement.doc = doc;
+        $rootScope.arrangement = arrangement.doc;
+
+        $rootScope.$emit('sync');
+        $rootScope.$emit('synced');
+      }).catch(function(err) {
+        console.log(err);
+        var newDoc = {
+          _id: arrangement.arrangement_id,
+          tracks: [],
+          buffers: [],
+          author: '10205425959841272',
+          title: 'Untitled'
+        };
+        arrangement.db.putIfNotExists(arrangement.arrangement_id, newDoc);
+      });
+    };
+
+    arrangement.db.replicate.from(CouchURL + _ArrangementDB).then(load).catch(load);
 
     arrangement.db.changes({
+      live: true, 
+      retry: true,
       since: 'now',
-      live: true,
       include_docs: true,
-      conflicts: true,
+      conflicts: true
     }).on('change', arrangement.syncing);
 
-    var opts = {live: true, retry: true};
-    arrangement.db.sync(CouchURL + _ArrangementDB, opts);
+    arrangement.sync();
+  }
+
+  arrangement.retrieve = function() {
+    return arrangement.db.get(arrangement.arrangement_id);
   }
 
   // SOCKET
@@ -940,71 +1082,79 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   var socket = io();
 
   socket.on('replicate', function (data) {
-    // console.log('===STREAM COMING===');
-    // console.log('receive');
-    // console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // console.log(data);
+    console.log('===STREAM COMING===');
     if (data._id == arrangement.arrangement_id) {
-      // data.temp = true;
-      // arrangement.doc = data;
-      // console.log(data.delta);
-      jsondiffpatch.patch(arrangement.doc, data.delta);
-      // console.log(arrangement.doc);
-      arrangement.doc.temp = true;
-      // console.log('nambah2');
-      self.stackCounter++;
+      if (!_.isEmpty(arrangement.delta)) {
 
-      $rootScope.$apply(function() {
-        $rootScope.arrangement = arrangement.doc;  
-      });
+        arrangement.checkOffline().then(function (conflict) {
+          if (conflict) {
+            arrangement.conflict();
+          }
+        });
+        arrangement.delta = {};
 
-      $rootScope.$emit('sync');
-      $rootScope.$emit('synced');
-      $rootScope.$emit('loadWatcher');
+      } else {
+        jsondiffpatch.patch(arrangement.doc, data.delta);
+        arrangement.timesock = data.timesock;
+
+        $rootScope.$apply(function() {
+          $rootScope.arrangement = arrangement.doc;  
+        });
+
+        $rootScope.$emit('sync');
+        $rootScope.$emit('synced');
+        $rootScope.$emit('loadWatcher');
+      }
     }
+  });
+
+  socket.on('addTrack', function (data) {
+
+    arrangement.addTrack('drums');
+    $rootScope.$apply(function() {
+      $rootScope.arrangement = arrangement.doc;  
+    });
+
+    $rootScope.$emit('sync');
+    $rootScope.$emit('synced');
+    $rootScope.$emit('loadWatcher');
   });
 
   // SOCKET
 
-  var watchComponent = function(newValue, delta) {
+  arrangement.watchComponent = function(newValue, delta) {
     var newDoc = newValue;
-    // console.log(self.stackCounter);
-    // if (self.stackCounter == 0) {
-    //   newDoc.temp = false;
-    // }
+    var timesock = newDoc._rev;
+    arrangement.queue = delta;
 
-    if (!newDoc.temp) {
-      // console.log('send');
-      // console.log(window.performance.now() + window.performance.timing.navigationStart);
+    socket.emit('replicate', {_id: newDoc._id, delta: delta, timesock: timesock}); 
+    
+    delete newDoc['_rev'];
+    delete newDoc['_id'];
+    delete newDoc['temp'];
+    delete newDoc['timesock'];
+
+    newDoc.timestamp = timesock;
+
+    console.log('PUT SENDING');
+
+    arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
+      return newDoc;
+    }).then(function(result) {
       
-      self.stackCounter++;
-      // console.log('nambah1');
-      
-      // newDoc.temp = true;
+    }).catch(function(error) {
+      console.log('failed to update');
+    });
 
-      socket.emit('replicate', {_id: newDoc._id, delta: delta}); 
-      
-      delete newDoc['_rev'];
-      delete newDoc['_id'];
-      delete newDoc['temp'];
-
-      arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
-        return newDoc;
-      }).then(function(result) {
-        if (self.stackCounter > 0)
-          self.stackCounter--;
-      }).catch(function(error) {
-        console.log('failed to update');
-      });
-
-    }
   }
 
   $rootScope.$watch('arrangement', function(newValue, oldValue){
     if (newValue && oldValue) {
       if (newValue._rev == oldValue._rev) {
         var delta = jsondiffpatch.diff(oldValue, newValue);
-        watchComponent(newValue, delta);
+        if (!arrangement.timesock) {
+          arrangement.watchComponent(newValue, delta);
+        }
       }
     }
   }, true);
@@ -1583,6 +1733,157 @@ app.directive('waveForm', ['$rootScope', '$compile', 'EditorConfig',
         if(unwatchOffsetEnd) unwatchOffsetEnd();
       });
     }
+  }
+}]);
+app.controller('RecordingController', function($scope, SharedAudioContext, Arrangement, BufferedRecordingNode){
+    var audioStream, audioInput, analyser, gainControl;
+
+    // Stops all streams and the recording
+    var stopRecording = function(){
+      if($scope.recorder)
+        $scope.recorder.stop();
+
+      gainControl.disconnect();
+      analyser.disconnect();
+      audioInput.disconnect();
+      audioStream.stop();
+      $scope.isRecording = false;
+    };
+
+    var cleanUp = function(){
+      $scope.isUploading = false;
+      $scope.uploadProgress = 0;
+      $scope.speakers = false;
+      $scope.analyser = null;
+      $scope.showRecording = false;
+      $scope.file = null;
+      $scope.recorder = null;
+      $scope.recordedNode = null;
+    };
+
+    $scope.uploadRecording = function(){
+      $scope.isUploading = true;
+      Arrangement.uploadBuffer($scope.file).then(function(uploadedFile){
+        // FileBrowser.setActiveFile(uploadedFile.name);
+        // FileBrowser.show();
+        $scope.cancelRecording();
+      }, function(err){
+        console.log('There was an error!', err);
+      }, function(percent){
+        $scope.uploadProgress = percent;
+      });
+    };
+
+    $scope.triggerRecording = function(){
+      if($scope.isRecording){
+        $scope.recorder.exportWAV(function(file){
+          $scope.file = file;
+          $scope.file.name = "new_recording_" + Date.now();
+          var fileReader = new FileReader();
+          fileReader.onload = function(){
+            var arrBuffer = this.result;
+            SharedAudioContext.getContext().decodeAudioData(arrBuffer, function(buffer){
+              $scope.$apply(function(){
+                $scope.recordedNode = new BufferedRecordingNode({}, buffer);
+              });
+            })
+          };
+          fileReader.readAsArrayBuffer(file);
+        });
+
+        stopRecording();
+      }else{
+        $scope.isRecording = true;
+        $scope.recorder = new Recorder(analyser, {
+          workerPath: 'dist/workers/recorderWorker.js'
+        });
+        $scope.recorder.record();
+      }
+    };
+
+    $scope.cancelRecording = function(){
+      stopRecording();
+      cleanUp();
+      $scope.removeAdditionalContent();
+    };
+
+    $scope.playRecording = function(){
+      if(!$scope.recordedNode) return;
+      if($scope.recordedNode.isPlaying())
+        $scope.recordedNode.stop();
+      else
+        $scope.recordedNode.play()
+    }
+
+    $scope.$watch('speakers', function(){
+      if (!gainControl) return;
+      if($scope.speakers){
+        gainControl.connect(SharedAudioContext.getContext().destination);
+      }else{
+        gainControl.disconnect();
+      }
+    })
+
+    // ask for microphone access
+    navigator.getUserMedia({audio: true}, function(stream){
+      var context = SharedAudioContext.getContext();
+      audioStream = stream;
+      audioInput = context.createMediaStreamSource(audioStream);
+      analyser = context.createAnalyser();
+
+      audioInput.connect(analyser);
+      gainControl = context.createGain();
+      gainControl.gain.value = 1;
+      audioInput.connect(gainControl);
+      if($scope.speakers)
+        gainControl.connect(context.destination);
+
+      $scope.$apply(function(){
+        $scope.analyser = analyser;
+      });
+    },function(err){
+      console.log(err);
+      // TODO: add proper error handling, especially for the case when users accidentally block the mic
+      alert('We did not get access to your microphone, please reload and allow access again!');
+    });
+
+});
+app.directive('recordingElement', function() {
+  return {
+    restrict: 'A',
+    templateUrl: 'partials/recording/recording-element.html',
+    controller: 'RecordingController'
+  }
+});
+app.controller('RecordingSelectionController', ['$rootScope', '$scope',
+  function($rootScope, $scope){
+
+  var close = function(){
+    $scope.node = null;
+    $scope.buffer = null;
+    $scope.showRecordingSelection = false;
+  };
+
+  $scope.playSelection = function(){
+    $scope.node.play();
+  };
+
+  $scope.uploadSelection = function(){
+    
+  };
+
+  $scope.deleteRecording = function(){
+
+  };
+
+}]);
+app.directive('recordingSelection', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
+  function($rootScope, $compile, EditorConfig, Arrangement) {
+
+  return {
+    restrict: 'A',
+    controller: 'RecordingSelectionController',
+    templateUrl: 'recording/recording-selection.html'
   }
 }]);
 app.directive('beatsGrid', function($compile, EditorConfig, Drumkits, $rootScope, Arrangement) {
@@ -2310,157 +2611,6 @@ app.directive('synthTone', ['$compile', 'EditorConfig',
     }
   }
 }]);
-app.controller('RecordingController', function($scope, SharedAudioContext, Arrangement, BufferedRecordingNode){
-    var audioStream, audioInput, analyser, gainControl;
-
-    // Stops all streams and the recording
-    var stopRecording = function(){
-      if($scope.recorder)
-        $scope.recorder.stop();
-
-      gainControl.disconnect();
-      analyser.disconnect();
-      audioInput.disconnect();
-      audioStream.stop();
-      $scope.isRecording = false;
-    };
-
-    var cleanUp = function(){
-      $scope.isUploading = false;
-      $scope.uploadProgress = 0;
-      $scope.speakers = false;
-      $scope.analyser = null;
-      $scope.showRecording = false;
-      $scope.file = null;
-      $scope.recorder = null;
-      $scope.recordedNode = null;
-    };
-
-    $scope.uploadRecording = function(){
-      $scope.isUploading = true;
-      Arrangement.uploadBuffer($scope.file).then(function(uploadedFile){
-        // FileBrowser.setActiveFile(uploadedFile.name);
-        // FileBrowser.show();
-        $scope.cancelRecording();
-      }, function(err){
-        console.log('There was an error!', err);
-      }, function(percent){
-        $scope.uploadProgress = percent;
-      });
-    };
-
-    $scope.triggerRecording = function(){
-      if($scope.isRecording){
-        $scope.recorder.exportWAV(function(file){
-          $scope.file = file;
-          $scope.file.name = "new_recording_" + Date.now();
-          var fileReader = new FileReader();
-          fileReader.onload = function(){
-            var arrBuffer = this.result;
-            SharedAudioContext.getContext().decodeAudioData(arrBuffer, function(buffer){
-              $scope.$apply(function(){
-                $scope.recordedNode = new BufferedRecordingNode({}, buffer);
-              });
-            })
-          };
-          fileReader.readAsArrayBuffer(file);
-        });
-
-        stopRecording();
-      }else{
-        $scope.isRecording = true;
-        $scope.recorder = new Recorder(analyser, {
-          workerPath: 'dist/workers/recorderWorker.js'
-        });
-        $scope.recorder.record();
-      }
-    };
-
-    $scope.cancelRecording = function(){
-      stopRecording();
-      cleanUp();
-      $scope.removeAdditionalContent();
-    };
-
-    $scope.playRecording = function(){
-      if(!$scope.recordedNode) return;
-      if($scope.recordedNode.isPlaying())
-        $scope.recordedNode.stop();
-      else
-        $scope.recordedNode.play()
-    }
-
-    $scope.$watch('speakers', function(){
-      if (!gainControl) return;
-      if($scope.speakers){
-        gainControl.connect(SharedAudioContext.getContext().destination);
-      }else{
-        gainControl.disconnect();
-      }
-    })
-
-    // ask for microphone access
-    navigator.getUserMedia({audio: true}, function(stream){
-      var context = SharedAudioContext.getContext();
-      audioStream = stream;
-      audioInput = context.createMediaStreamSource(audioStream);
-      analyser = context.createAnalyser();
-
-      audioInput.connect(analyser);
-      gainControl = context.createGain();
-      gainControl.gain.value = 1;
-      audioInput.connect(gainControl);
-      if($scope.speakers)
-        gainControl.connect(context.destination);
-
-      $scope.$apply(function(){
-        $scope.analyser = analyser;
-      });
-    },function(err){
-      console.log(err);
-      // TODO: add proper error handling, especially for the case when users accidentally block the mic
-      alert('We did not get access to your microphone, please reload and allow access again!');
-    });
-
-});
-app.directive('recordingElement', function() {
-  return {
-    restrict: 'A',
-    templateUrl: 'partials/recording/recording-element.html',
-    controller: 'RecordingController'
-  }
-});
-app.controller('RecordingSelectionController', ['$rootScope', '$scope',
-  function($rootScope, $scope){
-
-  var close = function(){
-    $scope.node = null;
-    $scope.buffer = null;
-    $scope.showRecordingSelection = false;
-  };
-
-  $scope.playSelection = function(){
-    $scope.node.play();
-  };
-
-  $scope.uploadSelection = function(){
-    
-  };
-
-  $scope.deleteRecording = function(){
-
-  };
-
-}]);
-app.directive('recordingSelection', ['$rootScope', '$compile', 'EditorConfig', 'Arrangement',
-  function($rootScope, $compile, EditorConfig, Arrangement) {
-
-  return {
-    restrict: 'A',
-    controller: 'RecordingSelectionController',
-    templateUrl: 'recording/recording-selection.html'
-  }
-}]);
 app.directive('duoRange', ['$compile', 'EditorConfig',
     function($compile, EditorConfig) {
 
@@ -2569,12 +2719,12 @@ app.controller('ProjectController', function($rootScope, $scope, $auth, $state, 
 
     if (arrangement != null) {
       var slug = arrangement.replace(/(^\-+|[^a-zA-Z0-9\/_| -]+|\-+$)/g, '').toLowerCase().replace(/[\/_| -]+/g, '-');
-      ArrangementDB.put({
+      ArrangementDB.putIfNotExists({
         _id: slug,
         title: arrangement,
         author: $scope.user.facebook,
         tracks: [],
-        buffers: [],
+        buffers: []
       }).then(function (data) {
         $scope.refresh();
       });
@@ -2587,14 +2737,14 @@ app.controller('ProjectController', function($rootScope, $scope, $auth, $state, 
       ArrangementDB.remove(arrangement).then(function(data) {
         $scope.refresh();
       });
-      SharedDB.query(function(doc) {
-        emit(doc.arrangement)
-      }, {startkey: arrangement._id, endkey: arrangement._id, include_docs: true}).then(function (data) {
-        _.map(data.rows, function(item) {
-          SharedDB.remove(item.doc).then(function(data) {
-            $scope.refresh();
-          });
-        });
+    }
+  }
+
+  $scope.removeShared = function(shared) {
+    var r = confirm("Are you sure want to remove ?");
+    if (r == true) {
+      SharedDB.remove(shared).then(function(data) {
+        $scope.refresh();
       });
     }
   }
@@ -2635,6 +2785,7 @@ app.controller('ProjectController', function($rootScope, $scope, $auth, $state, 
   Account.getProfile()
     .success(function(data) {
       $scope.user = data;
+      $rootScope.user = data;
       $scope.refresh();
     });  
 });
@@ -2930,187 +3081,6 @@ app.factory('utils', [function(){
     }
   };
 }]);
-app.factory('Account', function($http) {
-  return {
-    getProfile: function() {
-      // console.log('getProfile');
-      return $http.get('/api/me');
-    },
-    updateProfile: function(profileData) {
-      // console.log('updateProfile');
-      return $http.put('/api/me', profileData);
-    }
-  };
-});
-app.service('AudioCache', function($http, $q) {
-  var self = this;
-  window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem;
-  self.filesystem = null;
-
-  self.errorHandler = function(error) {
-    var message = '';
-
-    switch (error.code) {
-      case FileError.SECURITY_ERR:
-        message = 'Security Error';
-        break;
-      case FileError.NOT_FOUND_ERR:
-        message = 'Not Found Error';
-        break;
-      case FileError.QUOTA_EXCEEDED_ERR:
-        message = 'Quota Exceeded Error';
-        break;
-      case FileError.INVALID_MODIFICATION_ERR:
-        message = 'Invalid Modification Error';
-        break;
-      case FileError.INVALID_STATE_ERR:
-        message = 'Invalid State Error';
-        break;
-      default:
-        message = 'Unknown Error';
-        break;
-    }
-    console.log(message);
-  };
-
-  self.initFileSystem = function() {
-    navigator.webkitPersistentStorage.requestQuota(1024 * 1024 * 5,
-      function(grantedSize) {
-        window.requestFileSystem(window.PERSISTENT, grantedSize, function(fs) {
-          self.filesystem = fs;
-        }, self.errorHandler);
-      }, self.errorHandler);
-  };
-
-  self.downloadFile = function(url, success) {
-    var xhr = new XMLHttpRequest(); 
-    xhr.open('GET', url, true); 
-    xhr.responseType = "blob";
-    xhr.onload = function () { 
-      success(xhr.response);
-    };
-    xhr.send(null); 
-  };
-
-  self.saveFile = function(filename, content) {
-    if (self.filesystem === null) return;
-    self.filesystem.root.getFile(filename, {create: true}, function(fileEntry) {
-
-      fileEntry.createWriter(function(fileWriter) {
-
-        fileWriter.onwriteend = function(e) {
-          // $('#status').html('file saved :)');
-          console.log('cache saved');
-        };
-
-        fileWriter.onerror = function(e) {
-          console.log('Write error: ' + e.toString());
-          alert('An error occurred and your file could not be saved!');
-        };
-
-        var wavString = content;
-        var len = wavString.length;
-        var buf = new ArrayBuffer(len);
-        var view = new Uint8Array(buf);
-        for (var i = 0; i < len; i++) {
-          view[i] = wavString.charCodeAt(i) & 0xff;
-        }
-        var contentBlob = new Blob([view], {type: 'audio/wav'});
-
-        fileWriter.write(contentBlob);
-
-      }, self.errorHandler);
-
-    }, self.errorHandler);
-  };
-
-  self.loadFile = function(filename, success) {
-    if (self.filesystem === null) return;
-    self.filesystem.root.getFile(filename, {}, function(fileEntry) {
-
-      fileEntry.file(function(file) {
-        var reader = new FileReader();
-
-        reader.onload = function(e) {
-          success(this.result);
-        };
-
-        reader.readAsArrayBuffer(file);
-      }, self.errorHandler);
-
-    }, self.errorHandler);
-  };
-
-  self.getCache = function(file) {
-    var def = $q.defer();
-    self.loadFile(file, function (result) {
-      def.resolve(result);
-    });
-    return def.promise;
-  };
-
-  self.putCache = function(location, file) {
-    self.downloadFile(location, function(blob) {
-      self.saveFile(file, blob);
-    });
-  };
-
-  // Start the app by requesting a FileSystem (if the browser supports the API)
-  if (window.requestFileSystem) {
-    self.initFileSystem();
-  } else {
-    alert('Sorry! Your browser doesn\'t support the FileSystem API :(');
-  }
-
-  return self;
-});
-app.factory('Chat', function(CouchURL, _ChatDB) {
-  var remote = CouchURL + _ChatDB;
-  var ChatDB = new PouchDB(_ChatDB);
-  var opts = {live: true, retry: true};
-  var self = this;
-  self.scope = {};
-  self.name = '';
-  self.arrangement = '';
-
-  self.syncing = function(doc) {
-    if (self.arrangement != '') {
-      ChatDB.query(function (doc, emit) {
-        emit(doc.arrangement_id);
-      }, {startkey: self.arrangement, endkey: self.arrangement, include_docs: true}).then(function (docs) {
-        self.scope.$apply(function() {
-          self.scope[self.name] = _.map(docs.rows, function(item) {
-            return item.doc;
-          });
-        });
-      });
-    }
-  }
-
-  ChatDB.sync(remote, opts);
-  ChatDB.changes({
-    since: 'now',
-    live: true,
-  }).on('change', self.syncing);
-
-  return {
-    add: function(item) {
-      console.log(item);
-      self.scope[self.name].push(item);
-      ChatDB.put(item).then(function (result) {
-
-      });
-    },
-    bind: function(arrangement, $scope, name) {
-      self.scope = $scope;
-      self.name = name;
-      self.arrangement = arrangement;
-      self.syncing();
-    },
-  };
-});
-
-
 app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, $stateParams){
     
   $scope.arrangement_id = $stateParams.arrangement_id;
@@ -3157,13 +3127,54 @@ app.service('EditorConfig', function(){
     track_settings_offset: 190
   }
 });
-app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode, $auth, Account, $stateParams){
+app.controller('EditorController', function($rootScope, $scope, Arrangement, EditorConfig, Sampler, BufferedNode, $auth, Account, $stateParams, $interval, CouchURL){
     $scope.arrangement_id = $stateParams.arrangement_id;
     Arrangement.arrangement_id = $stateParams.arrangement_id;
     Arrangement.init();
 
     $scope.arrangement = Arrangement.doc;
     $scope.config = EditorConfig;
+
+    Offline.options = {checks: {xhr: {url: CouchURL}}};
+
+    var run = $interval(function() {
+      if (Offline.state === 'up')
+        Offline.check();
+    }, 2000);
+
+    var offline = {};
+
+    Offline.on('down', function() {
+      console.log('GOING DOWN');
+      Arrangement.stackCounter = 0;
+      Arrangement.offlineState = false;
+      Arrangement.offlineStamp = _.clone(Arrangement.doc.timestamp, true);
+      Arrangement.goOffline();
+      alert(Arrangement.offlineStamp);
+      offline = _.clone(Arrangement.doc, true);
+      // Arrangement.offline = [];
+      // console.log(offline);
+    });
+
+    Offline.on('up', function() {
+      console.log('GOING UP');
+      Arrangement.stackCounter = 0;
+      Arrangement.offlineState = true;
+      Arrangement.goOnline();
+      var currentDoc = _.clone(Arrangement.doc, true);
+      // console.log(offline);
+      // console.log(currentDoc);
+      var delta = jsondiffpatch.diff(offline, currentDoc);
+      if (delta) {
+        console.log(delta);
+        Arrangement.delta = delta;
+      }      
+    });
+
+    $scope.$destroy = function() {
+      $interval.cancel(run);
+      Offline.off('down');
+    }
 
     /**
      * Get user's profile information.
@@ -3187,7 +3198,7 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
     $scope.getProfile();
 
 });
-app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser){
+app.controller('EditorControlsController', function($rootScope, $scope, Scheduler, Arrangement, FileBrowser, $state){
 
   $rootScope.showCommunicationPanel = false;
   $rootScope.showSharePanel = false;
@@ -3245,6 +3256,10 @@ app.controller('EditorControlsController', function($rootScope, $scope, Schedule
 
   $scope.showShare = function(){
     $rootScope.showSharePanel = true;
+  };
+
+  $scope.backProject = function(){
+    $state.go('project');
   };
 
   $scope.isCommunicationPanelVisible = function(){
@@ -3920,6 +3935,188 @@ app.directive('timeLine', ['$rootScope', 'Arrangement', 'EditorConfig', 'Schedul
     }
   }
 }]);
+app.factory('Account', function($http) {
+  
+  return {
+    getProfile: function() {
+      // console.log('getProfile');
+      return $http.get('/api/me');
+    },
+    updateProfile: function(profileData) {
+      // console.log('updateProfile');
+      return $http.put('/api/me', profileData);
+    }
+  };
+});
+app.service('AudioCache', function($http, $q) {
+  var self = this;
+  window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem;
+  self.filesystem = null;
+
+  self.errorHandler = function(error) {
+    var message = '';
+
+    switch (error.code) {
+      case FileError.SECURITY_ERR:
+        message = 'Security Error';
+        break;
+      case FileError.NOT_FOUND_ERR:
+        message = 'Not Found Error';
+        break;
+      case FileError.QUOTA_EXCEEDED_ERR:
+        message = 'Quota Exceeded Error';
+        break;
+      case FileError.INVALID_MODIFICATION_ERR:
+        message = 'Invalid Modification Error';
+        break;
+      case FileError.INVALID_STATE_ERR:
+        message = 'Invalid State Error';
+        break;
+      default:
+        message = 'Unknown Error';
+        break;
+    }
+    console.log(message);
+  };
+
+  self.initFileSystem = function() {
+    navigator.webkitPersistentStorage.requestQuota(1024 * 1024 * 5,
+      function(grantedSize) {
+        window.requestFileSystem(window.PERSISTENT, grantedSize, function(fs) {
+          self.filesystem = fs;
+        }, self.errorHandler);
+      }, self.errorHandler);
+  };
+
+  self.downloadFile = function(url, success) {
+    var xhr = new XMLHttpRequest(); 
+    xhr.open('GET', url, true); 
+    xhr.responseType = "blob";
+    xhr.onload = function () { 
+      success(xhr.response);
+    };
+    xhr.send(null); 
+  };
+
+  self.saveFile = function(filename, content) {
+    if (self.filesystem === null) return;
+    self.filesystem.root.getFile(filename, {create: true}, function(fileEntry) {
+
+      fileEntry.createWriter(function(fileWriter) {
+
+        fileWriter.onwriteend = function(e) {
+          // $('#status').html('file saved :)');
+          console.log('cache saved');
+        };
+
+        fileWriter.onerror = function(e) {
+          console.log('Write error: ' + e.toString());
+          alert('An error occurred and your file could not be saved!');
+        };
+
+        var wavString = content;
+        var len = wavString.length;
+        var buf = new ArrayBuffer(len);
+        var view = new Uint8Array(buf);
+        for (var i = 0; i < len; i++) {
+          view[i] = wavString.charCodeAt(i) & 0xff;
+        }
+        var contentBlob = new Blob([view], {type: 'audio/wav'});
+
+        fileWriter.write(contentBlob);
+
+      }, self.errorHandler);
+
+    }, self.errorHandler);
+  };
+
+  self.loadFile = function(filename, success) {
+    if (self.filesystem === null) return;
+    self.filesystem.root.getFile(filename, {}, function(fileEntry) {
+
+      fileEntry.file(function(file) {
+        var reader = new FileReader();
+
+        reader.onload = function(e) {
+          success(this.result);
+        };
+
+        reader.readAsArrayBuffer(file);
+      }, self.errorHandler);
+
+    }, self.errorHandler);
+  };
+
+  self.getCache = function(file) {
+    var def = $q.defer();
+    self.loadFile(file, function (result) {
+      def.resolve(result);
+    });
+    return def.promise;
+  };
+
+  self.putCache = function(location, file) {
+    self.downloadFile(location, function(blob) {
+      self.saveFile(file, blob);
+    });
+  };
+
+  // Start the app by requesting a FileSystem (if the browser supports the API)
+  if (window.requestFileSystem) {
+    self.initFileSystem();
+  } else {
+    alert('Sorry! Your browser doesn\'t support the FileSystem API :(');
+  }
+
+  return self;
+});
+app.factory('Chat', function(CouchURL, _ChatDB) {
+  var remote = CouchURL + _ChatDB;
+  var ChatDB = new PouchDB(_ChatDB);
+  var opts = {live: true, retry: true};
+  var self = this;
+  self.scope = {};
+  self.name = '';
+  self.arrangement = '';
+
+  self.syncing = function(doc) {
+    if (self.arrangement != '') {
+      ChatDB.query(function (doc, emit) {
+        emit(doc.arrangement_id);
+      }, {startkey: self.arrangement, endkey: self.arrangement, include_docs: true}).then(function (docs) {
+        self.scope.$apply(function() {
+          self.scope[self.name] = _.map(docs.rows, function(item) {
+            return item.doc;
+          });
+        });
+      });
+    }
+  }
+
+  ChatDB.sync(remote, opts);
+  ChatDB.changes({
+    since: 'now',
+    live: true,
+  }).on('change', self.syncing);
+
+  return {
+    add: function(item) {
+      console.log(item);
+      self.scope[self.name].push(item);
+      ChatDB.put(item).then(function (result) {
+
+      });
+    },
+    bind: function(arrangement, $scope, name) {
+      self.scope = $scope;
+      self.name = name;
+      self.arrangement = arrangement;
+      self.syncing();
+    },
+  };
+});
+
+
 var recLength = 0,
   recBuffersL = [],
   recBuffersR = [],

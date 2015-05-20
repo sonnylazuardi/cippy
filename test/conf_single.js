@@ -11,19 +11,25 @@ exports.config = {
 
   // Spec patterns are relative to the current working directly when
   // protractor is called.
-  specs: ['yuhu.js'],
+  specs: ['single.js'],
 
-  multiCapabilities: [
-    {
-      'browserName': 'chrome'
-    },
-    {
-      'browserName': 'chrome'
-    },
-    {
-      'browserName': 'chrome'
-    }
-  ],
+  // multiCapabilities: [
+  //   {
+  //     'browserName': 'chrome'
+  //   },
+  //   {
+  //     'browserName': 'chrome'
+  //   },
+  //   {
+  //     'browserName': 'chrome'
+  //   },
+  //   {
+  //     'browserName': 'chrome'
+  //   },
+  //   {
+  //     'browserName': 'chrome'
+  //   }
+  // ],
 
   // Options to be passed to Jasmine-node.
   jasmineNodeOpts: {

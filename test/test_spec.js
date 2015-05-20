@@ -3,7 +3,7 @@ describe('cippy application concurrent test case', function() {
   var browser2;
 
   beforeEach(function() {
-    browser.get('http://localhost:8080/#/editor/musik-baru');
+    browser.get('http://localhost:8080/#/editor_test/hello');
     browser2 = browser.forkNewDriverInstance(true);
     browser3 = browser.forkNewDriverInstance(true);
   });

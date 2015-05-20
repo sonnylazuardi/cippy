@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width">
+  <title>Cippy Test Panel</title>
+  <link rel="icon" href="favicon.ico" sizes="32x32" type="image/ico">
+</head>
+<body>
+  
+  <button onclick="addTrack()">Add Track</button>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var socket = io();
+    function addTrack() {
+      socket.emit('sendEvent', { eventName: 'addTrack' });
+    }
+
+  </script>
+</body>
+</html>

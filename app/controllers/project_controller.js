@@ -15,12 +15,12 @@ app.controller('ProjectController', function($rootScope, $scope, $auth, $state, 
 
     if (arrangement != null) {
       var slug = arrangement.replace(/(^\-+|[^a-zA-Z0-9\/_| -]+|\-+$)/g, '').toLowerCase().replace(/[\/_| -]+/g, '-');
-      ArrangementDB.put({
+      ArrangementDB.putIfNotExists({
         _id: slug,
         title: arrangement,
         author: $scope.user.facebook,
         tracks: [],
-        buffers: [],
+        buffers: []
       }).then(function (data) {
         $scope.refresh();
       });
@@ -33,14 +33,14 @@ app.controller('ProjectController', function($rootScope, $scope, $auth, $state, 
       ArrangementDB.remove(arrangement).then(function(data) {
         $scope.refresh();
       });
-      SharedDB.query(function(doc) {
-        emit(doc.arrangement)
-      }, {startkey: arrangement._id, endkey: arrangement._id, include_docs: true}).then(function (data) {
-        _.map(data.rows, function(item) {
-          SharedDB.remove(item.doc).then(function(data) {
-            $scope.refresh();
-          });
-        });
+    }
+  }
+
+  $scope.removeShared = function(shared) {
+    var r = confirm("Are you sure want to remove ?");
+    if (r == true) {
+      SharedDB.remove(shared).then(function(data) {
+        $scope.refresh();
       });
     }
   }
@@ -81,6 +81,7 @@ app.controller('ProjectController', function($rootScope, $scope, $auth, $state, 
   Account.getProfile()
     .success(function(data) {
       $scope.user = data;
+      $rootScope.user = data;
       $scope.refresh();
     });  
 });

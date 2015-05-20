@@ -34,6 +34,11 @@ console.log('Server started on port:', config.appPort)
 /* SOCKET IO - Replication */
 io.on('connection', function (socket) {
   socket.on('replicate', function (data) {
+    console.log(data);
     socket.broadcast.emit('replicate', data);
-  })
-})
+  });
+  socket.on('sendEvent', function (data) {
+    console.log(data);
+    socket.broadcast.emit(data.eventName);
+  });
+});

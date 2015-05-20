@@ -1,12 +1,30 @@
 
-app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, CouchURL, _ArrangementDB, $interval){
+app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferUploader, $timeout, SharedAudioContext, $http, CouchURL, _ArrangementDB, $interval){
   var self = this;
   var timeInit = 0;
   var timeSend = 0;
   var timeReceive = 0;
-  self.stackCounter = 0;
+
   var arrangement = {
     doc: {},
+
+    offline: {},
+
+    delta: {},
+
+    offlineStamp: {},
+
+    shadow: {},
+
+    lastRev: {},
+
+    queue: {},
+
+    timesock: null,
+
+    stackCounter: 0,
+
+    onlineState: true,
 
     _rev: '',
 
@@ -138,66 +156,184 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   arrangement.compressor.connect(arrangement.context.destination);
   arrangement.db = {}
 
+  arrangement.checkOffline = function() {
+    var def = $q.defer();
+    var test = new PouchDB(CouchURL + _ArrangementDB);
+    test.get(arrangement.arrangement_id).then(function(data) {
+      console.log(data.timestamp);
+      alert(data.timestamp);
+      return def.resolve(arrangement.offlineStamp != data.timestamp);
+        
+    });
+    return def.promise;
+  }
+
+  arrangement.conflict = function() {
+    alert('This arrangement has a conflict with previous version. It will be forked to new arrangement.');
+    var newID =  arrangement.arrangement_id + '-conflicted-' + moment().format('YYYY-MM-DD-HH:mm:ss');
+    arrangement.db.putIfNotExists({
+      _id: newID,
+      title: arrangement.doc.title,
+      author: arrangement.doc.author,
+      buffers: arrangement.doc.buffers,
+      tracks: arrangement.doc.tracks,
+      timestamp: arrangement.doc.timestamp,
+    }).then(function (data) {
+      $state.go('editor', {arrangement_id: newID});
+    });
+  }
+
   arrangement.syncing = function(doc) {
+    arrangement.onlineState = true;
     // alert('sync');
-    // console.log(doc);
+    console.log('SYNCING');
+    console.log(doc);
     if (doc.id == arrangement.arrangement_id) {
 
+      function doUpdate(callback) {
+        if (!_.isEmpty(arrangement.delta)) {
+
+          arrangement.checkOffline().then(function (conflict) {
+            if (conflict) {
+              arrangement.conflict();
+            }
+          });
+          arrangement.delta = {};
+
+        } else {
+
+          $rootScope.$apply(function() {
+            if (!_.isEmpty(arrangement.queue)) {
+              var a = angular.copy(arrangement.doc);
+              var b = angular.copy(doc.doc);
+              delete a['_rev'];
+              delete b['_rev'];
+              delete a['temp'];
+              delete a['temp'];
+              delete a['timestamp'];
+              delete b['timestamp'];
+              var delta = jsondiffpatch.diff(a, b);
+              if (!delta) {
+                console.log('CHECK');
+                arrangement.temp = false;
+                arrangement.doc = doc.doc;
+              }
+            } else {
+              console.log('CHECK');
+              arrangement.temp = false;
+              arrangement.doc = doc.doc;
+            }
+            $rootScope.arrangement = arrangement.doc;
+          });
+
+        }
+      }
+
+      if (arrangement.timesock) {
+        if (doc.doc.timestamp >= arrangement.timesock) {
+          console.log('UPDATE!!!');
+          doUpdate();
+          arrangement.timesock = null;
+        }
+      } else {
+        doUpdate();
+      } 
+
       arrangement.doc._rev = doc.doc._rev;
-      if (self.stackCounter > 0) {
-        self.stackCounter--;
-      }
 
-      if (self.stackCounter == 0) {
-        arrangement.temp = false;
-        arrangement.doc = doc.doc;
-        $rootScope.$apply(function() {
-          $rootScope.arrangement = arrangement.doc;  
-        });
-      }
-
-      // console.log(self.stackCounter);
-         
-      // console.log('sync-receive');
-      // console.log(window.performance.now() + window.performance.timing.navigationStart);
 
       $rootScope.$emit('sync');
       $rootScope.$emit('synced');
       $rootScope.$emit('loadWatcher');
     }
   };
+
+  arrangement.goOffline = function() {
+
+  }
+
+  arrangement.push = function() {
+    console.log('PUT SENDING');
+
+    var newDoc = arrangement.doc;
+    delete newDoc['_rev'];
+    delete newDoc['_id'];
+    delete newDoc['temp'];
+    delete newDoc['timesock'];
+
+    arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
+      return newDoc;
+    }).then(function(result) {
+    }).catch(function(error) {
+      console.log('failed to update');
+    });
+  }
+
+  arrangement.goOnline = function() {
+    // arrangement.checkOffline().then(function (conflict) {
+    //   if (!conflict) {
+    arrangement.push();
+  }
+
+  arrangement.sync = function() {
+    var opts = {
+      live: true, 
+      retry: true,
+      since: 'now',
+      include_docs: true,
+      conflicts: true
+    };
+    arrangement.db.sync(CouchURL + _ArrangementDB, opts);
+  }
   
   arrangement.init = function() {
-    // var newDoc = {
-    //   _id: arrangement.arrangement_id,
-    //   tracks: [],
-    //   buffers: [],
-    // };
-    // db.putIfNotExists(arrangement.arrangement_id, newDoc);
-    arrangement.db = new PouchDB(_ArrangementDB);
-    console.log('init1');
-    console.log(window.performance.now());
+    
+    arrangement.db = new PouchDB(_ArrangementDB, {auto_compaction: true});
 
-    arrangement.db.get(arrangement.arrangement_id).then(function (doc) {
-      console.log('init2');
-      console.log(window.performance.now());
+    // DESTROY
+    // arrangement.db.destroy().then(function() {
+    //   console.log('DESTRYED');
+    // });
 
-      arrangement.doc = doc;
-      $rootScope.arrangement = arrangement.doc;
+    console.log(arrangement.arrangement_id);
 
-      $rootScope.$emit('sync');
-      $rootScope.$emit('synced');
-    });
+    var load = function() {
+      arrangement.db.get(arrangement.arrangement_id).then(function (doc) {
+        console.log(doc);
+      
+        arrangement.doc = doc;
+        $rootScope.arrangement = arrangement.doc;
+
+        $rootScope.$emit('sync');
+        $rootScope.$emit('synced');
+      }).catch(function(err) {
+        console.log(err);
+        var newDoc = {
+          _id: arrangement.arrangement_id,
+          tracks: [],
+          buffers: [],
+          author: '10205425959841272',
+          title: 'Untitled'
+        };
+        arrangement.db.putIfNotExists(arrangement.arrangement_id, newDoc);
+      });
+    };
+
+    arrangement.db.replicate.from(CouchURL + _ArrangementDB).then(load).catch(load);
 
     arrangement.db.changes({
+      live: true, 
+      retry: true,
       since: 'now',
-      live: true,
       include_docs: true,
-      conflicts: true,
+      conflicts: true
     }).on('change', arrangement.syncing);
 
-    var opts = {live: true, retry: true};
-    arrangement.db.sync(CouchURL + _ArrangementDB, opts);
+    arrangement.sync();
+  }
+
+  arrangement.retrieve = function() {
+    return arrangement.db.get(arrangement.arrangement_id);
   }
 
   // SOCKET
@@ -205,71 +341,79 @@ app.service('Arrangement', function($rootScope, $q, IDGenerator, BufferUploader,
   var socket = io();
 
   socket.on('replicate', function (data) {
-    // console.log('===STREAM COMING===');
-    // console.log('receive');
-    // console.log(window.performance.now() + window.performance.timing.navigationStart);
-    // console.log(data);
+    console.log('===STREAM COMING===');
     if (data._id == arrangement.arrangement_id) {
-      // data.temp = true;
-      // arrangement.doc = data;
-      // console.log(data.delta);
-      jsondiffpatch.patch(arrangement.doc, data.delta);
-      // console.log(arrangement.doc);
-      arrangement.doc.temp = true;
-      // console.log('nambah2');
-      self.stackCounter++;
+      if (!_.isEmpty(arrangement.delta)) {
 
-      $rootScope.$apply(function() {
-        $rootScope.arrangement = arrangement.doc;  
-      });
+        arrangement.checkOffline().then(function (conflict) {
+          if (conflict) {
+            arrangement.conflict();
+          }
+        });
+        arrangement.delta = {};
 
-      $rootScope.$emit('sync');
-      $rootScope.$emit('synced');
-      $rootScope.$emit('loadWatcher');
+      } else {
+        jsondiffpatch.patch(arrangement.doc, data.delta);
+        arrangement.timesock = data.timesock;
+
+        $rootScope.$apply(function() {
+          $rootScope.arrangement = arrangement.doc;  
+        });
+
+        $rootScope.$emit('sync');
+        $rootScope.$emit('synced');
+        $rootScope.$emit('loadWatcher');
+      }
     }
+  });
+
+  socket.on('addTrack', function (data) {
+
+    arrangement.addTrack('drums');
+    $rootScope.$apply(function() {
+      $rootScope.arrangement = arrangement.doc;  
+    });
+
+    $rootScope.$emit('sync');
+    $rootScope.$emit('synced');
+    $rootScope.$emit('loadWatcher');
   });
 
   // SOCKET
 
-  var watchComponent = function(newValue, delta) {
+  arrangement.watchComponent = function(newValue, delta) {
     var newDoc = newValue;
-    // console.log(self.stackCounter);
-    // if (self.stackCounter == 0) {
-    //   newDoc.temp = false;
-    // }
+    var timesock = newDoc._rev;
+    arrangement.queue = delta;
 
-    if (!newDoc.temp) {
-      // console.log('send');
-      // console.log(window.performance.now() + window.performance.timing.navigationStart);
+    socket.emit('replicate', {_id: newDoc._id, delta: delta, timesock: timesock}); 
+    
+    delete newDoc['_rev'];
+    delete newDoc['_id'];
+    delete newDoc['temp'];
+    delete newDoc['timesock'];
+
+    newDoc.timestamp = timesock;
+
+    console.log('PUT SENDING');
+
+    arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
+      return newDoc;
+    }).then(function(result) {
       
-      self.stackCounter++;
-      // console.log('nambah1');
-      
-      // newDoc.temp = true;
+    }).catch(function(error) {
+      console.log('failed to update');
+    });
 
-      socket.emit('replicate', {_id: newDoc._id, delta: delta}); 
-      
-      delete newDoc['_rev'];
-      delete newDoc['_id'];
-      delete newDoc['temp'];
-
-      arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
-        return newDoc;
-      }).then(function(result) {
-        if (self.stackCounter > 0)
-          self.stackCounter--;
-      }).catch(function(error) {
-        console.log('failed to update');
-      });
-
-    }
   }
 
   $rootScope.$watch('arrangement', function(newValue, oldValue){
     if (newValue && oldValue) {
       if (newValue._rev == oldValue._rev) {
         var delta = jsondiffpatch.diff(oldValue, newValue);
-        watchComponent(newValue, delta);
+        if (!arrangement.timesock) {
+          arrangement.watchComponent(newValue, delta);
+        }
       }
     }
   }, true);
