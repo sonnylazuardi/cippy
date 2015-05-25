@@ -1,0 +1,16 @@
+// DEVELOPMENT
+module.exports = {
+  type: 'development',
+  appPort: 8080,
+  aws: {
+    s3Bucket: 'your bucket',
+    accessKey: 'your access key',
+    secret: 'your secret'
+  },
+  CouchURL: 'http://localhost:5984/',
+  _ArrangementDB: 'cippy_arrangements',
+  _ChatDB: 'cippy_chats',
+  _UserDB: 'cippy_users',
+  TOKEN_SECRET: 'your token secret',
+  FACEBOOK_SECRET: 'your facebook secret',
+};

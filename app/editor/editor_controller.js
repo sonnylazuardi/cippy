@@ -8,18 +8,15 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
 
     Offline.options = {checks: {xhr: {url: CouchURL}}};
 
-    var run = $interval(function() {
-      if (Offline.state === 'up')
-        Offline.check();
-    }, 2000);
+    // var run = $interval(function() {
+    //   if (Offline.state === 'up')
+    //     Offline.check();
+    // }, 5000);
 
     var offline = {};
 
     Offline.on('down', function() {
       console.log('GOING DOWN');
-      Arrangement.stackCounter = 0;
-      Arrangement.offlineState = false;
-      Arrangement.offlineStamp = _.clone(Arrangement.doc.timestamp, true);
       Arrangement.goOffline();
       // alert(Arrangement.offlineStamp);
       offline = _.clone(Arrangement.doc, true);
@@ -29,15 +26,10 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
 
     Offline.on('up', function() {
       console.log('GOING UP');
-      Arrangement.stackCounter = 0;
-      Arrangement.offlineState = true;
       Arrangement.goOnline();
       var currentDoc = _.clone(Arrangement.doc, true);
-      // console.log(offline);
-      // console.log(currentDoc);
       var delta = jsondiffpatch.diff(offline, currentDoc);
       if (delta) {
-        // console.log(delta);
         Arrangement.delta = delta;
       }      
     });
@@ -45,6 +37,7 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
     $scope.$destroy = function() {
       $interval.cancel(run);
       Offline.off('down');
+      Offline.off('up');
     }
 
     /**

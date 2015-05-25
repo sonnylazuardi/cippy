@@ -5,11 +5,10 @@ var moment = require('moment');
 var request = require('request');
 var PouchDB = require('pouchdb');
 
-var CouchURL = 'http://localhost:5984/';
-var _ArrangementDB = 'cippy';
-var _ChatDB = 'cippy_chats';
-var _UserDB = 'cippy_users';
-
+var CouchURL = config.CouchURL;
+var _ArrangementDB = config._ArrangementDB;
+var _ChatDB = config._ChatDB;
+var _UserDB = config._UserDB;
 
 var db = new PouchDB(CouchURL + _ArrangementDB);
 var UserDB = new PouchDB(CouchURL + _UserDB);

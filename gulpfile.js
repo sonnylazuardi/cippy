@@ -5,7 +5,9 @@ var minifyHtml  = require("gulp-minify-html");
 var uglify      = require("gulp-uglify");
 var concatCss   = require('gulp-concat-css');
 var stylus      = require('gulp-stylus');
+var ngAnnotate = require('gulp-ng-annotate');
 var nib         = require('nib');
+
 var vendorPath  = [
   './vendor/js/angular.js',
   './vendor/js/angular-sanitize.js',
@@ -14,6 +16,7 @@ var vendorPath  = [
 ];
 var appPath = [
   './app/app.js', 
+  './app/config.js', 
   './app/modules/*/*/*.js',
   './app/modules/*/*.js',
   './app/*/*.js', 
@@ -44,6 +47,8 @@ gulp.task('templates', function() {
 gulp.task('scripts', function() {
   return gulp.src(appPath)
     .pipe(concat('app.js'))
+    .pipe(ngAnnotate())
+    .pipe(uglify())
     .pipe(gulp.dest('./public/dist/js'));
 });
 

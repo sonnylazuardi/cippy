@@ -9,12 +9,29 @@
 <body>
   
   <button onclick="addTrack()">Add Track</button>
+  <button onclick="addPiece()">Add Piece</button>
+  <button onclick="movePiece()">Move Piece</button>
+  <button onclick="deletePiece()">Delete Piece</button>
+  <button onclick="changeTitle()">Change Title</button>
+
   
   <script src="/socket.io/socket.io.js"></script>
   <script>
     var socket = io();
     function addTrack() {
       socket.emit('sendEvent', { eventName: 'addTrack' });
+    }
+    function addPiece() {
+      socket.emit('sendEvent', { eventName: 'addPiece' });
+    }
+    function movePiece() {
+      socket.emit('sendEvent', { eventName: 'movePiece' });
+    }
+    function deletePiece() {
+      socket.emit('sendEvent', { eventName: 'deletePiece' });
+    }
+    function changeTitle() {
+      socket.emit('sendEvent', { eventName: 'changeTitle' });
     }
 
   </script>

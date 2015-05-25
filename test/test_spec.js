@@ -5,7 +5,6 @@ describe('cippy application concurrent test case', function() {
   beforeEach(function() {
     browser.get('http://localhost:8080/#/editor_test/hello');
     browser2 = browser.forkNewDriverInstance(true);
-    browser3 = browser.forkNewDriverInstance(true);
   });
 
 
@@ -15,7 +14,6 @@ describe('cippy application concurrent test case', function() {
     var currentCount = 0;
     var browserReady1 = false;
     var browserReady2 = false;
-    var browserReady3 = false;
 
     function doChecking() {
 
@@ -32,10 +30,6 @@ describe('cippy application concurrent test case', function() {
             expect(count).toBe(currentCount + 1);
           });
 
-          browser3.element.all(by.repeater('track in arrangement.tracks')).count().then(function(count) {
-            expect(count).toBe(currentCount + 1);
-          });
-
         });
 
         it('should have the same title of track after changed', function() {
@@ -48,12 +42,6 @@ describe('cippy application concurrent test case', function() {
               title.sendKeys(protractor.Key.ENTER);  
 
               browser2.element.all(by.repeater('track in arrangement.tracks')).then(function(tracks) {
-                var title = tracks[0].element(by.model('track.title'));
-
-                expect(title.getText()).toEqual(newTitle);
-              });
-
-              browser3.element.all(by.repeater('track in arrangement.tracks')).then(function(tracks) {
                 var title = tracks[0].element(by.model('track.title'));
 
                 expect(title.getText()).toEqual(newTitle);
@@ -79,7 +67,7 @@ describe('cippy application concurrent test case', function() {
           return false;
         }
       });
-    }, 10000);
+    }, 100000);
     browser2.wait(function() {
       return browser2.element.all(by.repeater('track in arrangement.tracks')).count().then(function(count) {
         if (count > 0) {
@@ -89,25 +77,15 @@ describe('cippy application concurrent test case', function() {
           return false;
         }
       });
-    }, 10000);
-    browser3.wait(function() {
-      return browser3.element.all(by.repeater('track in arrangement.tracks')).count().then(function(count) {
-        if (count > 0) {
-          browserReady3 = true;
-          return true;
-        } else {
-          return false;
-        }
-      });
-    }, 10000);
-    browser3.wait(function() {
-      if (browserReady1 && browserReady2 && browserReady3) {
+    }, 100000);
+    browser2.wait(function() {
+      if (browserReady1 && browserReady2) {
         doChecking();
         return true;
       } else {
         return false;
       }
-    }, 10000);
+    }, 100000);
   });
 
 });

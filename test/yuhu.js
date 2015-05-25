@@ -1,7 +1,7 @@
 describe('cippy application concurrent test case', function() {
 
   beforeEach(function() {
-    browser.get('http://localhost:8080/#/editor_test/hello');
+    browser.get('http://localhost:8080/#/editor_test/testing');
   });
 
   it('should sync to other clients', function() {
