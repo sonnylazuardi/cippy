@@ -1,1 +1,26 @@
+######################
+# OS generated files #
+######################
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+######################
+# Dependencies       #
+######################
+
+# node modules don't belong into the repository
+# use a package.json and 'npm install' instead
+node_modules
 /node_modules/
+
+######################
+# The rest           #
+######################
+
+server/config/config.js
+server/uploads/*
+dump.rdb
