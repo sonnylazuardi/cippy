@@ -1,4 +1,4 @@
-app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, $stateParams){
+app.controller('CommunicationPanelController', function($rootScope, $scope, Arrangement, Chat, $http, $auth, Account, $stateParams, Cippy, CouchURL, _ChatDB){
     
   $scope.arrangement_id = $stateParams.arrangement_id;
   $scope.hideCommunicationPanel = function(){
@@ -12,7 +12,11 @@ app.controller('CommunicationPanelController', function($rootScope, $scope, Arra
 
   $scope.message = '';
   $scope.chats = [];
-  Chat.bind($scope.arrangement_id, $scope, 'chats');
+
+  var Chat = new Cippy(CouchURL + _ChatDB);
+  Chat.bindTo($scope, 'chats');
+  // $scope.chats = [];
+  // Chat.bind($scope.arrangement_id, $scope, 'chats');
 
   $scope.send = function() {
     var newMessage = {

@@ -76,6 +76,38 @@ app.factory('Socket', function($rootScope, IDGenerator, $timeout) {
     });
   });
 
+  self.socket.on('deletePiece', function (data) {
+    $timeout(function() {
+      console.log(self.currentTrack);
+      // var random = Math.floor((Math.random() * self.arrangement.doc.tracks.length) + 1) - 1;
+      var find = _.findWhere(self.arrangement.doc.tracks, {id: self.currentTrack});
+      if (find) {
+        find.pieces = _.without(find.pieces, find.pieces[0]);
+      }
+
+      console.log('::DEBUG:: deletePiece');
+      console.log(window.performance.now() + window.performance.timing.navigationStart);
+
+      self.update();
+    });
+  });
+
+  self.socket.on('deleteTrack', function (data) {
+    $timeout(function() {
+      console.log(self.currentTrack);
+      // var random = Math.floor((Math.random() * self.arrangement.doc.tracks.length) + 1) - 1;
+      var find = _.findWhere(self.arrangement.doc.tracks, {id: self.currentTrack});
+      if (find) {
+        self.arrangement.doc.tracks = _.without(self.arrangement.doc.tracks, find);
+      }
+
+      console.log('::DEBUG:: deletePiece');
+      console.log(window.performance.now() + window.performance.timing.navigationStart);
+
+      self.update();
+    });
+  });
+
   self.socket.on('changeTitle', function (data) {
     $timeout(function() {
 

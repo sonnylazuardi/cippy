@@ -1,16 +1,30 @@
 CACHE MANIFEST
 # v1 - 2015-04-14
 # Cippy audio cache.
+
 /index.html
+/offline.html
 /dist/js/app.js
 /dist/js/partials.js
 /dist/js/vendor.js
+/socket.io/socket.io.js
 /dist/css/skeleton.css
 /dist/css/font-awesome.css
 /dist/css/vendor.css
 /dist/css/app.css
+/dist/js/pouchdb.js
+/dist/js/pouchdb.upsert.min.js
+/dist/js/offline.min.js
+
+CACHE:
 /dist/sounds/drumkits/trap.wav
 /dist/sounds/drumkits/regular.wav
 /dist/font/fontello.woff
 /dist/font/SourceSansPro-Regular.otf
 /dist/images/logo.png
+
+NETWORK:
+*
+
+FALLBACK:
+/ /offline.html

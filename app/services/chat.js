@@ -21,6 +21,7 @@ app.factory('Chat', function(CouchURL, _ChatDB) {
     }
   }
 
+  console.log(ChatDB);
   ChatDB.sync(remote, opts);
   ChatDB.changes({
     since: 'now',

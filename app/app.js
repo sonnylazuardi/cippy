@@ -2,7 +2,8 @@ var app = angular.module('cippy', [
   'partials', 
   'ngSanitize',
   'ui.router',
-  'satellizer'
+  'satellizer',
+  'cippydb',
 ]); 
 
 app.config(function($stateProvider, $urlRouterProvider, $authProvider) {

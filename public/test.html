@@ -12,6 +12,7 @@
   <button onclick="addPiece()">Add Piece</button>
   <button onclick="movePiece()">Move Piece</button>
   <button onclick="deletePiece()">Delete Piece</button>
+  <button onclick="deleteTrack()">Delete Track</button>
   <button onclick="changeTitle()">Change Title</button>
 
   
@@ -29,6 +30,9 @@
     }
     function deletePiece() {
       socket.emit('sendEvent', { eventName: 'deletePiece' });
+    }
+    function deleteTrack() {
+      socket.emit('sendEvent', { eventName: 'deleteTrack' });
     }
     function changeTitle() {
       socket.emit('sendEvent', { eventName: 'changeTitle' });

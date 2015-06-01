@@ -161,14 +161,13 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
   arrangement.compressor.connect(arrangement.context.destination);
   arrangement.db = {}
 
-  arrangement.checkOffline = function() {
+  arrangement.checkOffline = function(timestamp) {
     var def = $q.defer();
     var test = new PouchDB(CouchURL + _ArrangementDB);
     test.get(arrangement.arrangement_id).then(function(data) {
       console.log(data.timestamp);
       console.log('bandingkan offline : retrieved => ' + arrangement.offlineStamp + ' : ' + data.timestamp);
-
-      return def.resolve(arrangement.offlineStamp < data.timestamp);
+      def.resolve(arrangement.offlineStamp < data.timestamp);
         
     });
     return def.promise;
@@ -202,21 +201,10 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
     if (doc.id == arrangement.arrangement_id) {
 
       function doUpdate(callback) {
-        if (!_.isEmpty(arrangement.delta)) {
-
-          console.log('CHECK DELTA IN REPLICATE');
-          arrangement.checkOffline().then(function (conflict) {
-            if (conflict) {
-              arrangement.conflict();
-            } else {
-              arrangement.delta = {};
-            }
-            arrangement.onlineSync = true;
-          });
-
-        } else {
+        
           console.log('SYNC REV');
           arrangement.doc._rev = doc.doc._rev;
+          arrangement.doc.timestamp = doc.doc.timestamp;
           console.log('::DEBUG:: recivedCouch');
           console.log(window.performance.now() + window.performance.timing.navigationStart);
 
@@ -243,12 +231,22 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
               arrangement.doc = doc.doc;
             }
             $rootScope.arrangement = arrangement.doc;
+            // arrangement.onlineSync = true;
           });
-
-        }
       }
 
-      if (arrangement.timesock) {
+      if (!_.isEmpty(arrangement.delta)) {
+        console.log('BEFORE UPDATE: Check Delta');
+        console.log(arrangement.delta);
+        arrangement.checkOffline().then(function (conflict) {
+          if (conflict) {
+            arrangement.conflict();
+          } else {
+            arrangement.delta = {};
+          }
+          arrangement.onlineSync = true;
+        });
+      } else if (arrangement.timesock) {
         if (doc.doc.timestamp >= arrangement.timesock) {
           console.log('UPDATE!!!');
           doUpdate();
@@ -291,6 +289,7 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
   arrangement.goOnline = function() {
     // arrangement.push();
     arrangement.offlineState = true;
+    console.log(arrangement.delta);
   }
 
   arrangement.sync = function() {
@@ -368,25 +367,14 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
   Socket.socket.on('replicate', function (data) {
     console.log('===STREAM COMING===');
     if (data._id == arrangement.arrangement_id && arrangement.onlineState && arrangement.onlineSync) {
-      if (!_.isEmpty(arrangement.delta) ) {
-
-        console.log('CHECK DELTA IN SOCKET');
-        arrangement.checkOffline().then(function (conflict) {
-          if (conflict) {
-            arrangement.conflict();
-          } else {
-            // arrangement.delta = {};
-          }
-        });
-
-      } else {
+      
         console.log('::DEBUG:: recivedSocket');
         console.log(window.performance.now() + window.performance.timing.navigationStart);
 
         console.log('UPDATE SOCKET');
         jsondiffpatch.patch(arrangement.doc, data.delta);
         arrangement.timesock = data.timesock;
-        arrangement.timestamp = data.timesock;
+        arrangement.doc.timestamp = data.timesock;
 
         $rootScope.$apply(function() {
           $rootScope.arrangement = arrangement.doc;  
@@ -395,7 +383,7 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
         $rootScope.$emit('sync');
         $rootScope.$emit('synced');
         $rootScope.$emit('loadWatcher');
-      }
+      
     }
   });
   // SOCKET
@@ -405,27 +393,44 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
     var timesock = newDoc._rev;
     arrangement.queue = delta;
 
-    Socket.socket.emit('replicate', {_id: newDoc._id, delta: delta, timesock: timesock}); 
-    
-    delete newDoc['_rev'];
-    delete newDoc['_id'];
-    delete newDoc['temp'];
-    delete newDoc['timesock'];
+    if (!_.isEmpty(arrangement.delta)) {
 
-    newDoc.timestamp = timesock;
+      console.log('CHECK DELTA IN REPLICATE');
+      arrangement.checkOffline().then(function (conflict) {
+        if (conflict) {
+          arrangement.conflict();
+        } else {
+          arrangement.delta = {};
+        }
+        arrangement.onlineSync = true;
+      });
 
+    } else {
 
-    console.log('PUT SENDING');
-    console.log('::DEBUG:: sendDiff');
-    console.log(window.performance.now() + window.performance.timing.navigationStart);
-
-    arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
-      return newDoc;
-    }).then(function(result) {
+      Socket.socket.emit('replicate', {_id: newDoc._id, delta: delta, timesock: timesock}); 
       
-    }).catch(function(error) {
-      console.log('failed to update');
-    });
+      delete newDoc['_rev'];
+      delete newDoc['_id'];
+      delete newDoc['temp'];
+      delete newDoc['timesock'];
+
+      newDoc.timestamp = timesock;
+      arrangement.doc.timestamp = timesock;
+
+
+      console.log('PUT SENDING');
+      console.log('::DEBUG:: sendDiff');
+      console.log(window.performance.now() + window.performance.timing.navigationStart);
+
+      arrangement.db.upsert(arrangement.arrangement_id, function(doc) {
+        return newDoc;
+      }).then(function(result) {
+        
+      }).catch(function(error) {
+        console.log('failed to update');
+      });
+
+    }
 
   }
 
@@ -439,6 +444,10 @@ app.service('Arrangement', function($rootScope, $q, $state, IDGenerator, BufferU
       }
     }
   }, true);
+
+  arrangement.setDelta = function(delta) {
+    arrangement.delta = delta;
+  }
 
   return arrangement;
 });

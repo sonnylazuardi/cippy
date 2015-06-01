@@ -8,10 +8,10 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
 
     Offline.options = {checks: {xhr: {url: CouchURL}}};
 
-    // var run = $interval(function() {
-    //   if (Offline.state === 'up')
-    //     Offline.check();
-    // }, 5000);
+    var run = $interval(function() {
+      if (Offline.state === 'up')
+        Offline.check();
+    }, 5000);
 
     var offline = {};
 
@@ -30,7 +30,8 @@ app.controller('EditorController', function($rootScope, $scope, Arrangement, Edi
       var currentDoc = _.clone(Arrangement.doc, true);
       var delta = jsondiffpatch.diff(offline, currentDoc);
       if (delta) {
-        Arrangement.delta = delta;
+        Arrangement.setDelta(delta);
+        console.log(delta);
       }      
     });
 

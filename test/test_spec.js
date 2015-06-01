@@ -67,7 +67,7 @@ describe('cippy application concurrent test case', function() {
           return false;
         }
       });
-    }, 100000);
+    }, 10000);
     browser2.wait(function() {
       return browser2.element.all(by.repeater('track in arrangement.tracks')).count().then(function(count) {
         if (count > 0) {
@@ -77,7 +77,7 @@ describe('cippy application concurrent test case', function() {
           return false;
         }
       });
-    }, 100000);
+    }, 10000);
     browser2.wait(function() {
       if (browserReady1 && browserReady2) {
         doChecking();
@@ -85,7 +85,7 @@ describe('cippy application concurrent test case', function() {
       } else {
         return false;
       }
-    }, 100000);
+    }, 10000);
   });
 
 });

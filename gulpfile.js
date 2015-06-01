@@ -48,7 +48,7 @@ gulp.task('scripts', function() {
   return gulp.src(appPath)
     .pipe(concat('app.js'))
     .pipe(ngAnnotate())
-    .pipe(uglify())
+    // .pipe(uglify())
     .pipe(gulp.dest('./public/dist/js'));
 });
 
